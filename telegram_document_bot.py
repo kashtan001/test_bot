@@ -408,7 +408,7 @@ def build_contratto(data: dict) -> BytesIO:
         "2. Estinzione anticipata senza penali.<br/>"
         "3. Riduzione TAN: −0,10 p.p. ogni 12 rate puntuali (fino a 6,50 %).<br/>"
         "4. CashBack 1 % su ogni rata versata.<br/>"
-        "5. "Financial Navigator" gratuito per 12 mesi.<br/>"
+        "5. 'Financial Navigator' gratuito per 12 mesi.<br/>"
         "6. SEPA gratuiti, SDD senza costi né mora.", s["BulletList"]
     ))
     # Penali
