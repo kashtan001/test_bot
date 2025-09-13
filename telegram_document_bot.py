@@ -18,12 +18,14 @@ from telegram.ext import (
     Application, CommandHandler, ConversationHandler, MessageHandler, ContextTypes, filters,
 )
 
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
+from reportlab.lib.units import cm, mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 # ---------------------- Настройки ------------------------------------------
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TOKEN_HERE")
@@ -34,6 +36,7 @@ CARTA_COST = 120.0
 LOGO_PATH = "logo_intesa.png"      # логотип 4×4 см
 SIGNATURE_PATH = "signature.png"   # подпись 4×2 см
 HEADER_LOGO_PATH = "Intesa_Sanpaolo_logo.jpg"  # логотип в заголовке
+FONT_PATH = "RobotoMono-VariableFont_wght.ttf"  # основной шрифт
 
 # ---------------------- Настройки сетки ------------------------------------
 DEBUG_GRID_ENABLED = True  # Переключатель отладочной сетки
@@ -63,11 +66,243 @@ def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
     return round(num / den, 2)
 
 
+def init_fonts():
+    """Инициализация кастомных шрифтов"""
+    try:
+        if os.path.exists(FONT_PATH):
+            # Регистрируем основной шрифт RobotoMono
+            pdfmetrics.registerFont(TTFont('RobotoMono', FONT_PATH))
+            
+            # Создаем варианты шрифта (эмуляция жирного и курсива)
+            # Для настоящего жирного/курсива нужны отдельные файлы шрифтов
+            pdfmetrics.registerFont(TTFont('RobotoMono-Bold', FONT_PATH))
+            pdfmetrics.registerFont(TTFont('RobotoMono-Italic', FONT_PATH))
+            pdfmetrics.registerFont(TTFont('RobotoMono-BoldItalic', FONT_PATH))
+            
+            return True
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить шрифт {FONT_PATH}: {e}")
+        return False
+    return False
+
+
 def _styles():
+    """Создание расширенной системы стилей с полным контролем дизайна"""
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="Header", alignment=TA_CENTER, fontSize=14, fontName="Helvetica-Bold", leading=18))
-    styles.add(ParagraphStyle(name="Body", fontSize=11, leading=15))
+    
+    # Проверяем доступность кастомного шрифта
+    font_available = init_fonts()
+    base_font = 'RobotoMono' if font_available else 'Helvetica'
+    bold_font = 'RobotoMono-Bold' if font_available else 'Helvetica-Bold'
+    
+    # =================== ЗАГОЛОВКИ ===================
+    styles.add(ParagraphStyle(
+        name="MainHeader",
+        parent=styles['Normal'],
+        fontName=bold_font,
+        fontSize=16,
+        leading=16,  # интервал = размер шрифта
+        alignment=TA_CENTER,
+        spaceAfter=12*mm,  # отступ после
+        spaceBefore=6*mm,  # отступ до
+        textColor=colors.black,
+        leftIndent=0,
+        rightIndent=0
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="SubHeader",
+        parent=styles['Normal'],
+        fontName=bold_font,
+        fontSize=14,
+        leading=14,
+        alignment=TA_LEFT,
+        spaceAfter=8*mm,
+        spaceBefore=4*mm,
+        textColor=colors.black
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="Header",
+        parent=styles['Normal'],
+        fontName=bold_font,
+        fontSize=12,
+        leading=12,
+        alignment=TA_CENTER,
+        spaceAfter=6*mm,
+        spaceBefore=3*mm,
+        textColor=colors.black
+    ))
+    
+    # =================== ОСНОВНОЙ ТЕКСТ ===================
+    styles.add(ParagraphStyle(
+        name="Body",
+        parent=styles['Normal'],
+        fontName=base_font,
+        fontSize=10,
+        leading=10,  # интервал = размер шрифта (1.0)
+        alignment=TA_LEFT,
+        spaceAfter=3*mm,
+        spaceBefore=0,
+        textColor=colors.black,
+        leftIndent=0,
+        rightIndent=0,
+        firstLineIndent=0
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="BodyBold",
+        parent=styles['Body'],
+        fontName=bold_font,
+        fontSize=10,
+        leading=10
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="BodySmall",
+        parent=styles['Body'],
+        fontSize=9,
+        leading=9,
+        spaceAfter=2*mm
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="BodyLarge",
+        parent=styles['Body'],
+        fontSize=12,
+        leading=12,
+        spaceAfter=4*mm
+    ))
+    
+    # =================== СПЕЦИАЛЬНЫЕ СТИЛИ ===================
+    styles.add(ParagraphStyle(
+        name="Centered",
+        parent=styles['Body'],
+        alignment=TA_CENTER
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="Right",
+        parent=styles['Body'],
+        alignment=TA_RIGHT
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="Justified",
+        parent=styles['Body'],
+        alignment=TA_JUSTIFY
+    ))
+    
+    # =================== СПИСКИ И ОТСТУПЫ ===================
+    styles.add(ParagraphStyle(
+        name="BulletList",
+        parent=styles['Body'],
+        leftIndent=15*mm,
+        bulletIndent=10*mm,
+        spaceAfter=2*mm
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="NumberedList",
+        parent=styles['Body'],
+        leftIndent=15*mm,
+        bulletIndent=10*mm,
+        spaceAfter=2*mm
+    ))
+    
+    # =================== ПОДПИСИ И ДАТЫ ===================
+    styles.add(ParagraphStyle(
+        name="Signature",
+        parent=styles['Body'],
+        fontSize=9,
+        leading=9,
+        alignment=TA_LEFT,
+        spaceAfter=15*mm,
+        spaceBefore=10*mm
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="Date",
+        parent=styles['Body'],
+        fontSize=10,
+        leading=10,
+        alignment=TA_LEFT,
+        spaceAfter=8*mm,
+        spaceBefore=5*mm
+    ))
+    
+    # =================== ТАБЛИЦЫ ===================
+    styles.add(ParagraphStyle(
+        name="TableHeader",
+        parent=styles['Normal'],
+        fontName=bold_font,
+        fontSize=10,
+        leading=10,
+        alignment=TA_CENTER,
+        textColor=colors.black
+    ))
+    
+    styles.add(ParagraphStyle(
+        name="TableCell",
+        parent=styles['Normal'],
+        fontName=base_font,
+        fontSize=9,
+        leading=9,
+        alignment=TA_LEFT,
+        textColor=colors.black
+    ))
+    
     return styles
+
+
+def create_custom_style(base_style_name: str, **kwargs) -> ParagraphStyle:
+    """
+    Создает кастомный стиль на основе существующего
+    
+    Параметры:
+    - base_style_name: имя базового стиля из _styles()
+    - kwargs: параметры для изменения
+    
+    Доступные параметры:
+    - fontName: имя шрифта ('RobotoMono', 'RobotoMono-Bold', 'Helvetica', etc.)
+    - fontSize: размер шрифта (int)
+    - leading: межстрочный интервал (int)
+    - alignment: выравнивание (TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY)
+    - spaceAfter: отступ после параграфа (в mm)
+    - spaceBefore: отступ перед параграфом (в mm)
+    - leftIndent: левый отступ (в mm)
+    - rightIndent: правый отступ (в mm)
+    - firstLineIndent: отступ первой строки (в mm)
+    - textColor: цвет текста (colors.black, colors.red, etc.)
+    - backColor: цвет фона
+    
+    Пример использования:
+    custom_style = create_custom_style('Body', 
+                                     fontSize=12, 
+                                     alignment=TA_CENTER,
+                                     textColor=colors.red,
+                                     spaceAfter=5*mm)
+    """
+    styles = _styles()
+    base_style = styles[base_style_name]
+    
+    # Конвертируем mm в points для ReportLab
+    if 'spaceAfter' in kwargs and isinstance(kwargs['spaceAfter'], type(mm)):
+        kwargs['spaceAfter'] = kwargs['spaceAfter']
+    if 'spaceBefore' in kwargs and isinstance(kwargs['spaceBefore'], type(mm)):
+        kwargs['spaceBefore'] = kwargs['spaceBefore']
+    if 'leftIndent' in kwargs and isinstance(kwargs['leftIndent'], type(mm)):
+        kwargs['leftIndent'] = kwargs['leftIndent']
+    if 'rightIndent' in kwargs and isinstance(kwargs['rightIndent'], type(mm)):
+        kwargs['rightIndent'] = kwargs['rightIndent']
+    if 'firstLineIndent' in kwargs and isinstance(kwargs['firstLineIndent'], type(mm)):
+        kwargs['firstLineIndent'] = kwargs['firstLineIndent']
+    
+    return ParagraphStyle(
+        name=f"Custom_{base_style_name}",
+        parent=base_style,
+        **kwargs
+    )
 
 
 def draw_debug_grid(canvas, doc):
@@ -81,8 +316,8 @@ def draw_debug_grid(canvas, doc):
     page_width = A4[0]
     page_height = A4[1]
     
-    # Размеры рабочей области (с учетом полей 2см)
-    margin = 2 * cm
+    # Размеры рабочей области (с учетом полей 2.54см)
+    margin = 2.54 * cm
     work_width = page_width - 2 * margin
     work_height = page_height - 2 * margin
     
@@ -129,18 +364,17 @@ def build_contratto(data: dict) -> BytesIO:
     s = _styles()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
-        leftMargin=2*cm, rightMargin=2*cm,
-        topMargin=2*cm, bottomMargin=2*cm
+        leftMargin=2.54*cm, rightMargin=2.54*cm,
+        topMargin=2.54*cm, bottomMargin=2.54*cm
     )
     e = []
-    # Шапка
-    e.append(Paragraph("Intesa Sanpaolo S.p.A.", s["Header"]))
-    e.append(Spacer(1, 8))
-    e.append(Paragraph("Sede legale: Piazza San Carlo, 156 – 10121 Torino", s["Body"]))
-    e.append(Paragraph("Capitale sociale € 10.368.870.930,08 – P.IVA 10810700015", s["Body"]))
-    e.append(Paragraph("Registro Imprese di Torino – ABI 03069.9", s["Body"]))
-    e.append(Spacer(1, 12))
-    e.append(Paragraph(f"<b>Cliente:</b> {data['name']}", s["Body"]))
+    # Шапка с использованием новых стилей
+    e.append(Paragraph("Intesa Sanpaolo S.p.A.", s["MainHeader"]))
+    e.append(Paragraph("Sede legale: Piazza San Carlo, 156 – 10121 Torino", s["BodySmall"]))
+    e.append(Paragraph("Capitale sociale € 10.368.870.930,08 – P.IVA 10810700015", s["BodySmall"]))
+    e.append(Paragraph("Registro Imprese di Torino – ABI 03069.9", s["BodySmall"]))
+    e.append(Spacer(1, 8*mm))
+    e.append(Paragraph(f"<b>Cliente:</b> {data['name']}", s["BodyBold"]))
     e.append(Spacer(1, 8))
     # Таблица
     tbl_data = [
@@ -160,46 +394,45 @@ def build_contratto(data: dict) -> BytesIO:
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (-1, 0), "CENTER")
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("FONTNAME", (0, 0), (-1, 0), s["TableHeader"].fontName),  # Заголовки таблицы
+        ("FONTSIZE", (0, 0), (-1, 0), s["TableHeader"].fontSize),
+        ("FONTNAME", (0, 1), (-1, -1), s["TableCell"].fontName),   # Ячейки таблицы
+        ("FONTSIZE", (0, 1), (-1, -1), s["TableCell"].fontSize)
     ]))
-    e.extend([tbl, Spacer(1, 10)])
+    e.extend([tbl, Spacer(1, 8*mm)])
     # Agevolazioni
-    e.append(Paragraph("<b>Agevolazioni</b>", s["Body"]))
+    e.append(Paragraph("<b>Agevolazioni</b>", s["SubHeader"]))
     e.append(Paragraph(
         "1. Pausa pagamenti fino a 3 rate consecutive.<br/>"
         "2. Estinzione anticipata senza penali.<br/>"
         "3. Riduzione TAN: −0,10 p.p. ogni 12 rate puntuali (fino a 6,50 %).<br/>"
         "4. CashBack 1 % su ogni rata versata.<br/>"
-        "5. “Financial Navigator” gratuito per 12 mesi.<br/>"
-        "6. SEPA gratuiti, SDD senza costi né mora.", s["Body"]
+        "5. "Financial Navigator" gratuito per 12 mesi.<br/>"
+        "6. SEPA gratuiti, SDD senza costi né mora.", s["BulletList"]
     ))
-    e.append(Spacer(1, 6))
     # Penali
-    e.append(Paragraph("<b>Penali e interessi di mora</b>", s["Body"]))
+    e.append(Paragraph("<b>Penali e interessi di mora</b>", s["SubHeader"]))
     e.append(Paragraph(
         "− Ritardo > 5 giorni: mora = TAN + 2 p.p.<br/>"
         "− Sollecito: 10 € cartaceo / 5 € digitale.<br/>"
         "− 2 rate non pagate = decadenza termine e recupero.<br/>"
         "− Polizza revocata = obbligo ripristino in 15 giorni.", s["Body"]
     ))
-    e.append(Spacer(1, 6))
     # Comunicazioni
-    e.append(Paragraph("<b>Comunicazioni tramite 1capital S.r.l.</b>", s["Body"]))
+    e.append(Paragraph("<b>Comunicazioni tramite 1capital S.r.l.</b>", s["SubHeader"]))
     e.append(Paragraph("Tutte le comunicazioni saranno gestite da 1capital S.r.l. Contatto: Telegram @manager_1cap", s["Body"]))
     e.append(Spacer(1, 10))
     # Подписи
     # Автоматическая дата
     from datetime import datetime
     today = datetime.now().strftime("%d/%m/%Y")
-    e.append(Paragraph(f"Luogo e data: Milano, {today}", s["Body"]))
-    e.append(Spacer(1, 6))
+    e.append(Paragraph(f"Luogo e data: Milano, {today}", s["Date"]))
     # Вставка подписи
     if os.path.exists(SIGNATURE_PATH):
         e.append(Image(SIGNATURE_PATH, width=6*cm, height=3*cm))
-        e.append(Spacer(1, 6))
-    e.append(Paragraph("Firma del rappresentante Intesa Sanpaolo", s["Body"]))
-    e.append(Spacer(1, 10))
-    e.append(Paragraph("Firma del Cliente: ________________________________________________", s["Body"]))
+    e.append(Paragraph("Firma del rappresentante Intesa Sanpaolo", s["Signature"]))
+    e.append(Paragraph("Firma del Cliente: ________________________________________________", s["Signature"]))
     doc.build(e, onFirstPage=_contratto_border)
     buf.seek(0)
     return buf
@@ -225,22 +458,19 @@ def _letter_common(subject: str, body: str) -> BytesIO:
         draw_debug_grid(canvas, doc)
     
     doc = SimpleDocTemplate(buf, pagesize=A4,
-                            leftMargin=2*cm, rightMargin=2*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
+                            leftMargin=2.54*cm, rightMargin=2.54*cm,
+                            topMargin=2.54*cm, bottomMargin=2.54*cm)
     elems = []
     if os.path.exists(LOGO_PATH):
         elems.append(Image(LOGO_PATH, width=4*cm, height=4*cm))
-        elems.append(Spacer(1, 8))
     elems.append(Paragraph("Ufficio Crediti Clientela Privata", s["Header"]))
-    elems.append(Spacer(1, 8))
-    elems.append(Paragraph(f"<b>Oggetto:</b> {subject}", s["Body"]))
-    elems.append(Spacer(1, 12))
+    elems.append(Paragraph(f"<b>Oggetto:</b> {subject}", s["BodyBold"]))
+    elems.append(Spacer(1, 8*mm))
     elems.append(Paragraph(body, s["Body"]))
-    elems.append(Spacer(1, 24))
+    elems.append(Spacer(1, 15*mm))
     if os.path.exists(SIGNATURE_PATH):
         elems.append(Image(SIGNATURE_PATH, width=4*cm, height=2*cm))
-        elems.append(Spacer(1, 4))
-        elems.append(Paragraph("Responsabile Ufficio Crediti Clientela Privata", s["Body"]))
+        elems.append(Paragraph("Responsabile Ufficio Crediti Clientela Privata", s["Signature"]))
     doc.build(elems, onFirstPage=letter_page_template, onLaterPages=letter_page_template)
     buf.seek(0)
     return buf
