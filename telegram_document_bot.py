@@ -10,6 +10,7 @@
 # -----------------------------------------------------------------------------
 import logging
 import os
+import re
 from io import BytesIO
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -18,14 +19,14 @@ from telegram.ext import (
     Application, CommandHandler, ConversationHandler, MessageHandler, ContextTypes, filters,
 )
 
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+from weasyprint import HTML, CSS
+from jinja2 import Template, FileSystemLoader, Environment
+from datetime import datetime
+from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm, mm
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.units import mm
+from PyPDF2 import PdfReader, PdfWriter
+from PIL import Image
 
 # ---------------------- Настройки ------------------------------------------
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TOKEN_HERE")
@@ -38,11 +39,6 @@ SIGNATURE_PATH = "signature.png"   # подпись 4×2 см
 HEADER_LOGO_PATH = "Intesa_Sanpaolo_logo.jpg"  # логотип в заголовке
 FONT_PATH = "RobotoMono-VariableFont_wght.ttf"  # основной шрифт
 
-# ---------------------- Настройки сетки ------------------------------------
-DEBUG_GRID_ENABLED = True  # Переключатель отладочной сетки
-GRID_OPACITY = 0.3  # Прозрачность сетки (30% = 70% прозрачности)
-GRID_ROWS = 20      # Количество строк сетки
-GRID_COLS = 20      # Количество столбцов сетки (итого 400 квадратов)
 
 logging.basicConfig(format="%(asctime)s — %(levelname)s — %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -66,485 +62,509 @@ def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
     return round(num / den, 2)
 
 
-def init_fonts():
-    """Инициализация кастомных шрифтов"""
-    try:
-        if os.path.exists(FONT_PATH):
-            # Регистрируем основной шрифт RobotoMono
-            pdfmetrics.registerFont(TTFont('RobotoMono', FONT_PATH))
-            
-            # Создаем варианты шрифта (эмуляция жирного и курсива)
-            # Для настоящего жирного/курсива нужны отдельные файлы шрифтов
-            pdfmetrics.registerFont(TTFont('RobotoMono-Bold', FONT_PATH))
-            pdfmetrics.registerFont(TTFont('RobotoMono-Italic', FONT_PATH))
-            pdfmetrics.registerFont(TTFont('RobotoMono-BoldItalic', FONT_PATH))
-            
-            return True
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить шрифт {FONT_PATH}: {e}")
-        return False
-    return False
+def init_jinja_env():
+    """Инициализация Jinja2 окружения для шаблонов"""
+    env = Environment(loader=FileSystemLoader('templates'))
+    return env
 
 
-def _styles():
-    """Создание расширенной системы стилей с полным контролем дизайна"""
-    styles = getSampleStyleSheet()
-    
-    # Проверяем доступность кастомного шрифта
-    font_available = init_fonts()
-    base_font = 'RobotoMono' if font_available else 'Helvetica'
-    bold_font = 'RobotoMono-Bold' if font_available else 'Helvetica-Bold'
-    
-    # =================== ЗАГОЛОВКИ ===================
-    styles.add(ParagraphStyle(
-        name="MainHeader",
-        parent=styles['Normal'],
-        fontName=bold_font,
-        fontSize=16,
-        leading=16,  # интервал = размер шрифта
-        alignment=TA_CENTER,
-        spaceAfter=12*mm,  # отступ после
-        spaceBefore=6*mm,  # отступ до
-        textColor=colors.black,
-        leftIndent=0,
-        rightIndent=0
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="SubHeader",
-        parent=styles['Normal'],
-        fontName=bold_font,
-        fontSize=14,
-        leading=14,
-        alignment=TA_LEFT,
-        spaceAfter=8*mm,
-        spaceBefore=4*mm,
-        textColor=colors.black
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="Header",
-        parent=styles['Normal'],
-        fontName=bold_font,
-        fontSize=12,
-        leading=12,
-        alignment=TA_CENTER,
-        spaceAfter=6*mm,
-        spaceBefore=3*mm,
-        textColor=colors.black
-    ))
-    
-    # =================== ОСНОВНОЙ ТЕКСТ ===================
-    styles.add(ParagraphStyle(
-        name="Body",
-        parent=styles['Normal'],
-        fontName=base_font,
-        fontSize=10,
-        leading=10,  # интервал = размер шрифта (1.0)
-        alignment=TA_LEFT,
-        spaceAfter=3*mm,
-        spaceBefore=0,
-        textColor=colors.black,
-        leftIndent=0,
-        rightIndent=0,
-        firstLineIndent=0
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="BodyBold",
-        parent=styles['Body'],
-        fontName=bold_font,
-        fontSize=10,
-        leading=10
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="BodySmall",
-        parent=styles['Body'],
-        fontSize=9,
-        leading=9,
-        spaceAfter=2*mm
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="BodyLarge",
-        parent=styles['Body'],
-        fontSize=12,
-        leading=12,
-        spaceAfter=4*mm
-    ))
-    
-    # =================== СПЕЦИАЛЬНЫЕ СТИЛИ ===================
-    styles.add(ParagraphStyle(
-        name="Centered",
-        parent=styles['Body'],
-        alignment=TA_CENTER
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="Right",
-        parent=styles['Body'],
-        alignment=TA_RIGHT
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="Justified",
-        parent=styles['Body'],
-        alignment=TA_JUSTIFY
-    ))
-    
-    # =================== СПИСКИ И ОТСТУПЫ ===================
-    styles.add(ParagraphStyle(
-        name="BulletList",
-        parent=styles['Body'],
-        leftIndent=15*mm,
-        bulletIndent=10*mm,
-        spaceAfter=2*mm
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="NumberedList",
-        parent=styles['Body'],
-        leftIndent=15*mm,
-        bulletIndent=10*mm,
-        spaceAfter=2*mm
-    ))
-    
-    # =================== ПОДПИСИ И ДАТЫ ===================
-    styles.add(ParagraphStyle(
-        name="Signature",
-        parent=styles['Body'],
-        fontSize=9,
-        leading=9,
-        alignment=TA_LEFT,
-        spaceAfter=15*mm,
-        spaceBefore=10*mm
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="Date",
-        parent=styles['Body'],
-        fontSize=10,
-        leading=10,
-        alignment=TA_LEFT,
-        spaceAfter=8*mm,
-        spaceBefore=5*mm
-    ))
-    
-    # =================== ТАБЛИЦЫ ===================
-    styles.add(ParagraphStyle(
-        name="TableHeader",
-        parent=styles['Normal'],
-        fontName=bold_font,
-        fontSize=10,
-        leading=10,
-        alignment=TA_CENTER,
-        textColor=colors.black
-    ))
-    
-    styles.add(ParagraphStyle(
-        name="TableCell",
-        parent=styles['Normal'],
-        fontName=base_font,
-        fontSize=9,
-        leading=9,
-        alignment=TA_LEFT,
-        textColor=colors.black
-    ))
-    
-    return styles
+def format_money(amount: float) -> str:
+    """Форматирование суммы в евро"""
+    return f"€ {amount:,.2f}".replace(',', ' ')
 
 
-def create_custom_style(base_style_name: str, **kwargs) -> ParagraphStyle:
-    """
-    Создает кастомный стиль на основе существующего
-    
-    Параметры:
-    - base_style_name: имя базового стиля из _styles()
-    - kwargs: параметры для изменения
-    
-    Доступные параметры:
-    - fontName: имя шрифта ('RobotoMono', 'RobotoMono-Bold', 'Helvetica', etc.)
-    - fontSize: размер шрифта (int)
-    - leading: межстрочный интервал (int)
-    - alignment: выравнивание (TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY)
-    - spaceAfter: отступ после параграфа (в mm)
-    - spaceBefore: отступ перед параграфом (в mm)
-    - leftIndent: левый отступ (в mm)
-    - rightIndent: правый отступ (в mm)
-    - firstLineIndent: отступ первой строки (в mm)
-    - textColor: цвет текста (colors.black, colors.red, etc.)
-    - backColor: цвет фона
-    
-    Пример использования:
-    custom_style = create_custom_style('Body', 
-                                     fontSize=12, 
-                                     alignment=TA_CENTER,
-                                     textColor=colors.red,
-                                     spaceAfter=5*mm)
-    """
-    styles = _styles()
-    base_style = styles[base_style_name]
-    
-    # Конвертируем mm в points для ReportLab
-    if 'spaceAfter' in kwargs and isinstance(kwargs['spaceAfter'], type(mm)):
-        kwargs['spaceAfter'] = kwargs['spaceAfter']
-    if 'spaceBefore' in kwargs and isinstance(kwargs['spaceBefore'], type(mm)):
-        kwargs['spaceBefore'] = kwargs['spaceBefore']
-    if 'leftIndent' in kwargs and isinstance(kwargs['leftIndent'], type(mm)):
-        kwargs['leftIndent'] = kwargs['leftIndent']
-    if 'rightIndent' in kwargs and isinstance(kwargs['rightIndent'], type(mm)):
-        kwargs['rightIndent'] = kwargs['rightIndent']
-    if 'firstLineIndent' in kwargs and isinstance(kwargs['firstLineIndent'], type(mm)):
-        kwargs['firstLineIndent'] = kwargs['firstLineIndent']
-    
-    return ParagraphStyle(
-        name=f"Custom_{base_style_name}",
-        parent=base_style,
-        **kwargs
-    )
+def format_date() -> str:
+    """Получение текущей даты в итальянском формате"""
+    return datetime.now().strftime("%d/%m/%Y")
 
 
-def draw_debug_grid(canvas, doc):
-    """Рисует отладочную сетку 20x20 с нумерацией квадратов"""
-    if not DEBUG_GRID_ENABLED:
-        return
-    
-    canvas.saveState()
-    
-    # Получаем размеры страницы с учетом полей
-    page_width = A4[0]
-    page_height = A4[1]
-    
-    # Размеры рабочей области (с учетом полей 2.54см)
-    margin = 2.54 * cm
-    work_width = page_width - 2 * margin
-    work_height = page_height - 2 * margin
-    
-    # Размер одного квадрата сетки
-    cell_width = work_width / GRID_COLS
-    cell_height = work_height / GRID_ROWS
-    
-    # Устанавливаем прозрачность для сетки
-    canvas.setFillColorRGB(0, 0, 0, alpha=GRID_OPACITY)
-    canvas.setStrokeColorRGB(0, 0, 0, alpha=GRID_OPACITY)
-    canvas.setLineWidth(0.5)
-    
-    # Рисуем вертикальные линии
-    for i in range(GRID_COLS + 1):
-        x = margin + i * cell_width
-        canvas.line(x, margin, x, page_height - margin)
-    
-    # Рисуем горизонтальные линии
-    for i in range(GRID_ROWS + 1):
-        y = margin + i * cell_height
-        canvas.line(margin, y, page_width - margin, y)
-    
-    # Добавляем нумерацию квадратов
-    canvas.setFont("Helvetica", 6)  # Маленький шрифт для номеров
-    
-    cell_number = 1
-    for row in range(GRID_ROWS):
-        for col in range(GRID_COLS):
-            # Координаты центра квадрата
-            x = margin + col * cell_width + cell_width / 2
-            y = page_height - margin - row * cell_height - cell_height / 2
-            
-            # Рисуем номер в центре квадрата
-            text_width = canvas.stringWidth(str(cell_number), "Helvetica", 6)
-            canvas.drawString(x - text_width / 2, y - 3, str(cell_number))
-            
-            cell_number += 1
-    
-    canvas.restoreState()
+def render_template(template_name: str, **kwargs) -> str:
+    """Рендеринг HTML шаблона с переданными данными"""
+    env = init_jinja_env()
+    template = env.get_template(template_name)
+    return template.render(**kwargs)
 
-# ---------------------- PDF-строители --------------------------------------
+# ---------------------- PDF-строители с WeasyPrint -------------------------
 def build_contratto(data: dict) -> BytesIO:
-    buf = BytesIO()
-    s = _styles()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=2.54*cm, rightMargin=2.54*cm,
-        topMargin=2.54*cm, bottomMargin=2.54*cm
-    )
-    e = []
-    # Шапка с использованием новых стилей
-    e.append(Paragraph("Intesa Sanpaolo S.p.A.", s["MainHeader"]))
-    e.append(Paragraph("Sede legale: Piazza San Carlo, 156 – 10121 Torino", s["BodySmall"]))
-    e.append(Paragraph("Capitale sociale € 10.368.870.930,08 – P.IVA 10810700015", s["BodySmall"]))
-    e.append(Paragraph("Registro Imprese di Torino – ABI 03069.9", s["BodySmall"]))
-    e.append(Spacer(1, 8*mm))
-    e.append(Paragraph(f"<b>Cliente:</b> {data['name']}", s["BodyBold"]))
-    e.append(Spacer(1, 8))
-    # Таблица
-    tbl_data = [
-        ["Voce", "Dettagli"],
-        ["Importo richiesto", money(data['amount'])],
-        ["TAN fisso", f"{data['tan']:.2f} %"],
-        ["TAEG indicativo", f"{data['taeg']:.2f} %"],
-        ["Durata", f"{data['duration']} mesi"],
-        ["Rata mensile*", money(data['payment'])],
-        ["Spese di istruttoria", "0 €"],
-        ["Commissione di incasso rata", "0 €"],
-        ["Contributo amministrativo", "80 €"],
-        ["Premio assicurativo obbligatorio", "120 € (tramite 1capital S.r.l.)"]
+    """PDF конструктор с исправленной разметкой и изображениями через ReportLab - СТРОГО 2 СТРАНИЦЫ!"""
+    # Читаем оригинальный HTML шаблон
+    with open('contratto.html', 'r', encoding='utf-8') as f:
+        html = f.read()
+    
+    # Добавляем CSS для правильной разметки - СТРОГО 2 СТРАНИЦЫ!
+    css_fixes = """
+    <style>
+    @page {
+        size: A4;
+        margin: 6mm;  /* Уменьшенный отступ для экономии места */
+        border: 3pt solid #f17321;  /* Оранжевая рамка на каждой странице */
+        padding: 3mm;  /* Отступ от рамки до контента */
+    }
+    
+    body {
+        font-family: "Roboto Mono", monospace;
+        font-size: 10pt;  /* Возвращаем нормальный размер шрифта */
+        line-height: 1.0;  /* Нормальная высота строки */
+        margin: 0;
+        padding: 0;
+    }
+    
+    /* КРИТИЧНО: Убираем ВСЕ рамки из элементов, оставляем только @page */
+    .c20 {
+        border: none !important;
+        padding: 3mm !important;  /* Нормальные отступы */
+        margin: 0 !important;
+    }
+    
+    /* СТРОГИЙ КОНТРОЛЬ: МАКСИМУМ 2 СТРАНИЦЫ */
+    * {
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .page-break {
+        page-break-before: always !important;
+        page-break-after: avoid !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* ВОССТАНАВЛИВАЕМ НОРМАЛЬНЫЕ ОТСТУПЫ В ТЕКСТЕ */
+    p {
+        margin: 2pt 0 !important;  /* Нормальные отступы между параграфами */
+        padding: 0 !important;
+        line-height: 1.0 !important;
+    }
+    
+    div {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    table {
+        margin: 3pt 0 !important;  /* Нормальные отступы для таблиц */
+        font-size: 10pt !important;  /* Нормальный размер шрифта */
+    }
+    
+    /* Убираем Google Docs стили */
+    .c22 {
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+    }
+    
+    .c14, .c25 {
+        margin-left: 0 !important;
+    }
+    
+    /* НОРМАЛЬНЫЕ ЗАГОЛОВКИ С ОТСТУПАМИ */
+    .c15 {
+        font-size: 14pt !important;  /* Возвращаем нормальный размер */
+        margin: 4pt 0 !important;    /* Нормальные отступы */
+        font-weight: 700 !important;
+    }
+    
+    .c10 {
+        font-size: 12pt !important;  /* Возвращаем нормальный размер */
+        margin: 3pt 0 !important;    /* Нормальные отступы */
+        font-weight: 700 !important;
+    }
+    
+    /* ТОЛЬКО пустые элементы делаем невидимыми - НЕ ТРОГАЕМ текстовые! */
+    .c6:empty {
+        height: 0pt !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* Нормальные отступы для списков */
+    .c3 {
+        margin: 1pt 0 !important;
+    }
+    
+    /* Запрещаем создание страниц после 2-й */
+    @page:nth(3) {
+        display: none !important;
+    }
+    
+    /* УБИРАЕМ КРАСНОЕ ВЫДЕЛЕНИЕ ТЕКСТА */
+    .c1, .c16 {
+        background-color: transparent !important;
+        background: none !important;
+    }
+    
+    /* СЕТКА ДЛЯ ПОЗИЦИОНИРОВАНИЯ ИЗОБРАЖЕНИЙ 25x35 - НА КАЖДОЙ СТРАНИЦЕ */
+    .grid-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 210mm;  /* Полная ширина A4 */
+        height: 297mm; /* Полная высота A4 */
+        pointer-events: none;
+        z-index: 1000;
+        opacity: 0; /* 0% прозрачности - невидимая */
+    }
+    
+    /* Сетка для каждой страницы отдельно */
+    .page-grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 1000;
+        opacity: 0.3;
+    }
+    
+    .grid-cell {
+        position: absolute;
+        border: none;
+        background-color: transparent;
+        display: none;
+        font-size: 6pt;
+        font-weight: bold;
+        color: transparent;
+        font-family: Arial, sans-serif;
+        box-sizing: border-box;
+    }
+    
+    /* Позиционирование относительно сетки */
+    .positioned-image {
+        position: absolute;
+        z-index: 500;
+    }
+    </style>
+    """
+    
+    # Вставляем CSS после тега <head>
+    html = html.replace('<head>', f'<head>{css_fixes}')
+    
+    # КРИТИЧНО: Убираем ВСЕ элементы, создающие лишние страницы
+    
+    # 1. ПОЛНОСТЬЮ убираем блок с 3 изображениями между разделами
+    middle_images_pattern = r'<p class="c3"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image4\.png"[^>]*></span></p>'
+    html = re.sub(middle_images_pattern, '', html)
+    
+    # 2. Убираем ВСЕ пустые div и параграфы в конце
+    html = re.sub(r'<div><p class="c6 c18"><span class="c7 c23"></span></p></div>$', '', html)
+    html = re.sub(r'<p class="c3 c6"><span class="c7 c12"></span></p>$', '', html)
+    html = re.sub(r'<p class="c6 c24"><span class="c7 c12"></span></p>$', '', html)
+    
+    # 3. Убираем избыточные пустые строки между разделами (НЕ в тексте!)
+    html = re.sub(r'(<p class="c3 c6"><span class="c7 c12"></span></p>\s*){2,}', '<p class="c3 c6"><span class="c7 c12"></span></p>', html)
+    html = re.sub(r'(<p class="c24 c6"><span class="c7 c12"></span></p>\s*)+', '', html)
+    
+    # 4. Убираем лишние высоты из таблиц
+    html = html.replace('class="c13"', 'class="c13" style="height: auto !important;"')
+    html = html.replace('class="c19"', 'class="c19" style="height: auto !important;"')
+    
+    # 5. Принудительно разбиваем на 2 страницы: после раздела 2 (Agevolazioni)
+    agevolazioni_end = html.find('• Bonifici SEPA e SDD gratuiti, senza spese aggiuntive')
+    if agevolazioni_end != -1:
+        # Находим конец этого раздела
+        next_section_start = html.find('</td></tr></table>', agevolazioni_end)
+        if next_section_start != -1:
+            # Вставляем разрыв страницы
+            html = html[:next_section_start] + '</td></tr></table><div class="page-break"></div>' + html[next_section_start+len('</td></tr></table>'):]
+    
+    # ГЕНЕРИРУЕМ СЕТКУ 25x35 ДЛЯ ПОЗИЦИОНИРОВАНИЯ
+    def generate_grid():
+        """Генерирует HTML сетку 25x35 с нумерацией для A4"""
+        grid_html = '<div class="grid-overlay">\n'
+        
+        # Размеры страницы A4 в миллиметрах
+        page_width_mm = 210  # A4 ширина
+        page_height_mm = 297  # A4 высота
+        
+        cell_width_mm = page_width_mm / 25  # 8.4mm на ячейку
+        cell_height_mm = page_height_mm / 35  # 8.49mm на ячейку
+        
+        cell_number = 1
+        
+        for row in range(35):
+            for col in range(25):
+                x_mm = col * cell_width_mm
+                y_mm = row * cell_height_mm
+                
+                grid_html += f'''    <div class="grid-cell" style="
+                    left: {x_mm:.1f}mm; 
+                    top: {y_mm:.1f}mm; 
+                    width: {cell_width_mm:.1f}mm; 
+                    height: {cell_height_mm:.1f}mm;">
+                    {cell_number}
+                </div>\n'''
+                
+                cell_number += 1
+        
+        grid_html += '</div>\n'
+        return grid_html
+    
+    # Добавляем сетку в body
+    grid_overlay = generate_grid()
+    html = html.replace('<body class="c22 doc-content">', f'<body class="c22 doc-content">\n{grid_overlay}')
+    
+    # Заменяем XXX на реальные данные (в правильном порядке!)
+    replacements = [
+        ('>XXX<', f">{data['name']}<"),  # имя клиента (первое)
+        ('>XXX<', f">{format_money(data['amount'])}<"),  # сумма кредита
+        ('>XXX<', f">{data['tan']:.2f}%<"),  # TAN
+        ('>XXX<', f">{data['taeg']:.2f}%<"),  # TAEG  
+        ('>XXX<', f">{data['duration']} mesi<"),  # срок
+        ('>XXX<', f">{format_money(data['payment'])}<"),  # платеж
+        ('11/06/2025', format_date()),  # дата
+        ('>XXX<', f">{data['name']}<"),  # имя в подписи
     ]
-    tbl = Table(tbl_data, colWidths=[7*cm, 7*cm])
-    tbl.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-        ("FONTNAME", (0, 0), (-1, 0), s["TableHeader"].fontName),  # Заголовки таблицы
-        ("FONTSIZE", (0, 0), (-1, 0), s["TableHeader"].fontSize),
-        ("FONTNAME", (0, 1), (-1, -1), s["TableCell"].fontName),   # Ячейки таблицы
-        ("FONTSIZE", (0, 1), (-1, -1), s["TableCell"].fontSize)
-    ]))
-    e.extend([tbl, Spacer(1, 8*mm)])
-    # Agevolazioni
-    e.append(Paragraph("<b>Agevolazioni</b>", s["SubHeader"]))
-    e.append(Paragraph(
-        "1. Pausa pagamenti fino a 3 rate consecutive.<br/>"
-        "2. Estinzione anticipata senza penali.<br/>"
-        "3. Riduzione TAN: −0,10 p.p. ogni 12 rate puntuali (fino a 6,50 %).<br/>"
-        "4. CashBack 1 % su ogni rata versata.<br/>"
-        "5. 'Financial Navigator' gratuito per 12 mesi.<br/>"
-        "6. SEPA gratuiti, SDD senza costi né mora.", s["BulletList"]
-    ))
-    # Penali
-    e.append(Paragraph("<b>Penali e interessi di mora</b>", s["SubHeader"]))
-    e.append(Paragraph(
-        "− Ritardo > 5 giorni: mora = TAN + 2 p.p.<br/>"
-        "− Sollecito: 10 € cartaceo / 5 € digitale.<br/>"
-        "− 2 rate non pagate = decadenza termine e recupero.<br/>"
-        "− Polizza revocata = obbligo ripristino in 15 giorni.", s["Body"]
-    ))
-    # Comunicazioni
-    e.append(Paragraph("<b>Comunicazioni tramite 1capital S.r.l.</b>", s["SubHeader"]))
-    e.append(Paragraph("Tutte le comunicazioni saranno gestite da 1capital S.r.l. Contatto: Telegram @manager_1cap", s["Body"]))
-    e.append(Spacer(1, 10))
-    # Подписи
-    # Автоматическая дата
-    from datetime import datetime
-    today = datetime.now().strftime("%d/%m/%Y")
-    e.append(Paragraph(f"Luogo e data: Milano, {today}", s["Date"]))
-    # Вставка подписи
-    if os.path.exists(SIGNATURE_PATH):
-        e.append(Image(SIGNATURE_PATH, width=6*cm, height=3*cm))
-    e.append(Paragraph("Firma del rappresentante Intesa Sanpaolo", s["Signature"]))
-    e.append(Paragraph("Firma del Cliente: ________________________________________________", s["Signature"]))
-    doc.build(e, onFirstPage=_contratto_border)
-    buf.seek(0)
-    return buf
-
-
-def _contratto_border(canvas, doc) -> None:
-    # Сначала рисуем отладочную сетку (на заднем плане)
-    draw_debug_grid(canvas, doc)
     
-    canvas.saveState()
-    # Логотип в правом верхнем углу только для contratto (поверх сетки)
-    if os.path.exists(HEADER_LOGO_PATH):
-        canvas.drawImage(HEADER_LOGO_PATH, A4[0]-8.2*cm, A4[1]-2*cm, width=6.8*cm, height=0.9*cm)
-    canvas.restoreState()
-
-
-def _letter_common(subject: str, body: str) -> BytesIO:
-    buf = BytesIO()
-    s = _styles()
+    for old, new in replacements:
+        html = html.replace(old, new, 1)  # заменяем по одному
     
-    def letter_page_template(canvas, doc):
-        """Шаблон страницы для писем с отладочной сеткой"""
-        draw_debug_grid(canvas, doc)
+    # Конвертируем в PDF через WeasyPrint
+    pdf_bytes = HTML(string=html).write_pdf()
     
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-                            leftMargin=2.54*cm, rightMargin=2.54*cm,
-                            topMargin=2.54*cm, bottomMargin=2.54*cm)
-    elems = []
-    if os.path.exists(LOGO_PATH):
-        elems.append(Image(LOGO_PATH, width=4*cm, height=4*cm))
-    elems.append(Paragraph("Ufficio Crediti Clientela Privata", s["Header"]))
-    elems.append(Paragraph(f"<b>Oggetto:</b> {subject}", s["BodyBold"]))
-    elems.append(Spacer(1, 8*mm))
-    elems.append(Paragraph(body, s["Body"]))
-    elems.append(Spacer(1, 15*mm))
-    if os.path.exists(SIGNATURE_PATH):
-        elems.append(Image(SIGNATURE_PATH, width=4*cm, height=2*cm))
-        elems.append(Paragraph("Responsabile Ufficio Crediti Clientela Privata", s["Signature"]))
-    doc.build(elems, onFirstPage=letter_page_template, onLaterPages=letter_page_template)
-    buf.seek(0)
-    return buf
+    # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
+    try:
+        # Создаем overlay с изображениями
+        overlay_buffer = BytesIO()
+        overlay_canvas = canvas.Canvas(overlay_buffer, pagesize=A4)
+        
+        # Получаем размер изображения для масштабирования
+        img = Image.open("company.png")
+        img_width_mm = img.width * 0.264583  # пиксели в мм (96 DPI)
+        img_height_mm = img.height * 0.264583
+        
+        # Увеличиваем на 20% (было уменьшение в 2 раза, теперь увеличиваем)
+        scaled_width = (img_width_mm / 2) * 1.2  # +20% к уменьшенному размеру
+        scaled_height = (img_height_mm / 2) * 1.2
+        
+        # Размер ячейки для расчета сдвигов
+        cell_width_mm = 210/25  # 8.4mm
+        cell_height_mm = 297/35  # 8.49mm
+        
+        # Страница 1: изображение в квадрате 52 + сдвиг (влево на 0.5, вниз на 0.5)
+        # Квадрат 52 = строка 2, колонка 1 (нумерация с 1)
+        row_52 = (52 - 1) // 25 + 1  # строка 2 + 1 = строка 3
+        col_52 = (52 - 1) % 25 + 1   # колонка 1 + 1 = колонка 2
+        
+        # Левая грань квадрата + сдвиги (ReportLab считает от НИЗА страницы!)
+        x_52 = (col_52 * cell_width_mm - 0.5 * cell_width_mm) * mm  # влево на пол клетки
+        y_52 = (297 - (row_52 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm) * mm  # вниз на пол клетки
+        
+        # Рисуем с увеличением на 20% и сохранением прозрачности
+        overlay_canvas.drawImage("company.png", x_52, y_52, 
+                               width=scaled_width*mm, height=scaled_height*mm, 
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем logo.png в квадрат 71 первой страницы с уменьшением на 20% и сдвигом влево на 2 клетки
+        # Квадрат 71 = строка 2, колонка 20 (71-1=70, 70//25=2, 70%25=20)
+        row_71 = (71 - 1) // 25  # строка 2
+        col_71 = (71 - 1) % 25   # колонка 20
+        
+        # Получаем размер logo.png для уменьшения на 20%
+        logo_img = Image.open("logo.png")
+        logo_width_mm = logo_img.width * 0.264583  # пиксели в мм (96 DPI)
+        logo_height_mm = logo_img.height * 0.264583
+        
+        # Уменьшаем в 9 раз (3 * 3)
+        logo_scaled_width = logo_width_mm / 9  # уменьшение в 9 раз
+        logo_scaled_height = logo_height_mm / 9
+        
+        # Левая грань квадрата 71 + сдвиг вправо на 4 клетки и вниз на 1.25 клетки
+        x_71 = (col_71 - 2 + 4) * cell_width_mm * mm  # было влево на 2, теперь вправо на 4
+        y_71 = (297 - (row_71 * cell_height_mm + cell_height_mm) - 1.25 * cell_height_mm) * mm  # вниз на 1.25 клетки
+        
+        # Рисуем logo.png с уменьшением на 20%
+        overlay_canvas.drawImage("logo.png", x_71, y_71, 
+                               width=logo_scaled_width*mm, height=logo_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем нумерацию страницы 1 между клетками 862 и 863 (аналогично второй странице)
+        # Используем те же координаты что и для второй страницы
+        row_862_p1 = (862 - 1) // 25  # строка 34
+        col_862_p1 = (862 - 1) % 25   # колонка 11
+        
+        # Позиция между клетками 862 и 863 (на границе) + сдвиг на полклетки вправо и на 1/4 клетки вниз
+        x_page_num_p1 = (col_862_p1 + 1 + 0.5) * cell_width_mm * mm  # граница между клетками + полклетки вправо
+        y_page_num_p1 = (297 - (row_862_p1 * cell_height_mm + cell_height_mm/2) - 0.25 * cell_height_mm) * mm  # середина строки + 1/4 клетки вниз
+        
+        # Рисуем цифру 1 размером 10pt
+        overlay_canvas.setFillColorRGB(0, 0, 0)  # Черный цвет
+        overlay_canvas.setFont("Helvetica", 10)
+        overlay_canvas.drawString(x_page_num_p1-2, y_page_num_p1-2, "1")
+        
+        overlay_canvas.showPage()
+        
+        # Страница 2: Добавляем logo.png точь в точь как на первой странице
+        # Сетка убрана - невидимая (0% прозрачности)
+        
+        # Добавляем logo.png на вторую страницу точь в точь как на первой
+        # Используем те же координаты и размеры что и на первой странице
+        overlay_canvas.drawImage("logo.png", x_71, y_71, 
+                               width=logo_scaled_width*mm, height=logo_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем sing_2.png в квадрат 637 второй страницы с уменьшением в 7 раз
+        # Квадрат 637 = строка 25, колонка 12 (637-1=636, 636//25=25, 636%25=11)
+        row_637 = (637 - 1) // 25  # строка 25
+        col_637 = (637 - 1) % 25   # колонка 11
+        
+        # Получаем размер sing_2.png для уменьшения в 7 раз
+        sing_img = Image.open("sing_2.png")
+        sing_width_mm = sing_img.width * 0.264583  # пиксели в мм (96 DPI)
+        sing_height_mm = sing_img.height * 0.264583
+        
+        # Уменьшаем в 7 раз и дополнительно на 10%
+        sing_scaled_width = (sing_width_mm / 7) * 0.9  # -10%
+        sing_scaled_height = (sing_height_mm / 7) * 0.9
+        
+        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вниз на 0.5 клетки
+        x_637 = (col_637 - 1) * cell_width_mm * mm  # влево на 1 клетку
+        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm) * mm  # вниз на 0.5 клетки
+        
+        # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности
+        overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
+                               width=sing_scaled_width*mm, height=sing_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем sing_1.png в квадрат 628 второй страницы с уменьшением в 6 раз
+        # Квадрат 628 = строка 25, колонка 3 (628-1=627, 627//25=25, 627%25=2)
+        row_628 = (628 - 1) // 25  # строка 25
+        col_628 = (628 - 1) % 25   # колонка 2
+        
+        # Получаем размер sing_1.png для уменьшения в 6 раз
+        sing1_img = Image.open("sing_1.png")
+        sing1_width_mm = sing1_img.width * 0.264583  # пиксели в мм (96 DPI)
+        sing1_height_mm = sing1_img.height * 0.264583
+        
+        # Уменьшаем в 6 раз и увеличиваем на 10%
+        sing1_scaled_width = (sing1_width_mm / 6) * 1.1  # +10%
+        sing1_scaled_height = (sing1_height_mm / 6) * 1.1
+        
+        # Левая грань квадрата 628 + сдвиг на 2 клетки вниз
+        x_628 = col_628 * cell_width_mm * mm
+        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 2 * cell_height_mm) * mm  # вниз на 2 клетки
+        
+        # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности
+        overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
+                               width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем seal.png в квадрат 682 второй страницы с уменьшением в 7 раз
+        # Квадрат 682 = строка 27, колонка 7 (682-1=681, 681//25=27, 681%25=6)
+        row_682 = (682 - 1) // 25  # строка 27
+        col_682 = (682 - 1) % 25   # колонка 6
+        
+        # Получаем размер seal.png для уменьшения в 7 раз
+        seal_img = Image.open("seal.png")
+        seal_width_mm = seal_img.width * 0.264583  # пиксели в мм (96 DPI)
+        seal_height_mm = seal_img.height * 0.264583
+        
+        # Уменьшаем в 7 раз
+        seal_scaled_width = seal_width_mm / 7
+        seal_scaled_height = seal_height_mm / 7
+        
+        # Левая грань квадрата 682
+        x_682 = col_682 * cell_width_mm * mm
+        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm
+        
+        # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности
+        overlay_canvas.drawImage("seal.png", x_682, y_682, 
+                               width=seal_scaled_width*mm, height=seal_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем нумерацию страницы 2 между клетками 862 и 863
+        # Квадрат 862 = строка 34, колонка 12 (862-1=861, 861//25=34, 861%25=11)
+        # Квадрат 863 = строка 34, колонка 13 (863-1=862, 862//25=34, 862%25=12)
+        row_862 = (862 - 1) // 25  # строка 34
+        col_862 = (862 - 1) % 25   # колонка 11
+        col_863 = (863 - 1) % 25   # колонка 12
+        
+        # Позиция между клетками 862 и 863 (на границе) + сдвиг на полклетки вправо и на 1/4 клетки вниз
+        x_page_num = (col_862 + 1 + 0.5) * cell_width_mm * mm  # граница между клетками + полклетки вправо
+        y_page_num = (297 - (row_862 * cell_height_mm + cell_height_mm/2) - 0.25 * cell_height_mm) * mm  # середина строки + 1/4 клетки вниз
+        
+        # Рисуем цифру 2 размером 10pt
+        overlay_canvas.setFillColorRGB(0, 0, 0)  # Черный цвет
+        overlay_canvas.setFont("Helvetica", 10)
+        overlay_canvas.drawString(x_page_num-2, y_page_num-2, "2")
+        
+        overlay_canvas.save()
+        
+        # Объединяем PDF с overlay
+        overlay_buffer.seek(0)
+        base_pdf = PdfReader(BytesIO(pdf_bytes))
+        overlay_pdf = PdfReader(overlay_buffer)
+        
+        writer = PdfWriter()
+        
+        # Накладываем изображения на каждую страницу
+        for i, page in enumerate(base_pdf.pages):
+            if i < len(overlay_pdf.pages):
+                page.merge_page(overlay_pdf.pages[i])
+            writer.add_page(page)
+        
+        # Сохраняем финальный PDF
+        final_buffer = BytesIO()
+        writer.write(final_buffer)
+        final_pdf_bytes = final_buffer.getvalue()
+        
+        buf = BytesIO(final_pdf_bytes)
+        buf.seek(0)
+        return buf
+        
+    except Exception as e:
+        # Если ошибка с ReportLab, возвращаем обычный PDF
+        print(f"Ошибка ReportLab: {e}")
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
 
 
 def build_lettera_garanzia(name: str) -> BytesIO:
-    subj = "Versamento Contributo di Garanzia"
-    body = (
-        f"Gentile <b>{name}</b>,<br/><br/>"
-        "Desideriamo informarla che, a seguito delle verifiche effettuate nel corso dell'istruttoria "
-        "della sua pratica di finanziamento, il suo nominativo risulta rientrare nella categoria dei "
-        "soggetti a rischio elevato secondo i parametri interni di affidabilità creditizia.<br/><br/>"
-        "In ottemperanza alle normative vigenti e alle procedure interne di tutela, il finanziamento "
-        f"approvato è soggetto all'applicazione di un <b>Contributo di Garanzia una tantum pari a {money(GARANZIA_COST)}</b>. "
-        "Questo contributo è finalizzato a garantire la regolare erogazione e gestione del credito concesso.<br/><br/>"
-        "Tutte le operazioni finanziarie, inclusa la corresponsione del Contributo di Garanzia, devono "
-        "essere effettuate esclusivamente tramite il nostro intermediario autorizzato <b>1capital S.r.l.</b>"
-    )
-    return _letter_common(subj, body)
+    """Генерация PDF письма о гарантии через WeasyPrint"""
+    template_data = {
+        'name': name
+    }
+    
+    html_content = render_template('garanzia.html', **template_data)
+    pdf_bytes = HTML(string=html_content).write_pdf()
+    
+    buf = BytesIO(pdf_bytes)
+    buf.seek(0)
+    return buf
 
 
 def build_lettera_carta(data: dict) -> BytesIO:
-    subj = "Apertura Conto Credito e Emissione Carta"
-    name = data['name']
-    amount = money(data['amount'])
-    months = data['duration']
-    tan = f"{data['tan']:.2f}%"
-    payment = money(data['payment'])
-    cost = money(CARTA_COST)
-    body = (
-        f"<b>Vantaggio Importante per il Cliente {name}</b><br/><br/>"
-        f"Siamo lieti di informarla che il Suo prestito è stato <b>approvato</b> con successo per un importo di {amount}, "
-        f"con una durata di {months} mesi al tasso annuo nominale (TAN) del {tan}.<br/><br/>"
-        f"Il Suo pagamento mensile sarà pari a {payment}.<br/><br/>"
-        "Per ricevere l'erogazione del credito, indipendentemente dal fatto che Lei possieda già un conto "
-        "presso di noi, è necessario procedere con l'apertura di un <b>conto di credito</b>. "
-        f"Il costo del servizio di emissione della carta di credito associata ammonta a {cost}.<br/><br/>"
-        f"<b>Perché è richiesto il versamento di {cost}?</b><br/>"
-        "Il contributo rappresenta una quota di attivazione necessaria per:<br/>"
-        "- la generazione del codice IBAN dedicato,<br/>"
-        "- la produzione e l’invio della carta di credito,<br/>"
-        "- l’accesso prioritario ai servizi clienti,<br/>"
-        "- la gestione digitale del prestito.<br/><br/>"
-        "Il contributo previene le frodi e conferma l’identità del richiedente.<br/>"
-        "Rimaniamo a Sua disposizione per ogni assistenza.<br/><br/>"
-        "Cordiali saluti,<br/>"
-        "Intesa Sanpaolo S.p.A."
-    )
-    return _letter_common(subj, body)
+    """Генерация PDF письма о карте через WeasyPrint"""
+    template_data = {
+        'name': data['name'],
+        'amount': format_money(data['amount']),
+        'tan': f"{data['tan']:.2f}",
+        'duration': data['duration'],
+        'payment': format_money(data['payment'])
+    }
+    
+    html_content = render_template('carta.html', **template_data)
+    pdf_bytes = HTML(string=html_content).write_pdf()
+    
+    buf = BytesIO(pdf_bytes)
+    buf.seek(0)
+    return buf
 
 # ------------------------- Handlers -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
-    kb = [["/contratto", "/garanzia", "/carta"], ["/toggle_grid"]]
-    grid_status = "ON" if DEBUG_GRID_ENABLED else "OFF"
+    kb = [["/contratto", "/garanzia", "/carta"]]
     await update.message.reply_text(
-        f"Benvenuto! Scegli documento:\n\nОтладочная сетка: {grid_status}",
+        "Benvenuto! Scegli documento:",
         reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True, resize_keyboard=True)
     )
     return CHOOSING_DOC
 
-async def toggle_grid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Переключает отладочную сетку"""
-    global DEBUG_GRID_ENABLED
-    DEBUG_GRID_ENABLED = not DEBUG_GRID_ENABLED
-    grid_status = "ON" if DEBUG_GRID_ENABLED else "OFF"
-    await update.message.reply_text(f"Отладочная сетка: {grid_status}")
-    return await start(update, context)
-
 async def choose_doc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     doc_type = update.message.text
-    if doc_type == '/toggle_grid':
-        return await toggle_grid(update, context)
-    
     context.user_data['doc_type'] = doc_type
     await update.message.reply_text(
         "Inserisci nome e cognome del cliente:",
@@ -614,7 +634,7 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta|/toggle_grid)$'), choose_doc)],
+            CHOOSING_DOC: [MessageHandler(filters.Regex(r'^(/contratto|/garanzia|/carta)$'), choose_doc)],
             ASK_NAME:     [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
             ASK_AMOUNT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_amount)],
             ASK_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_duration)],
