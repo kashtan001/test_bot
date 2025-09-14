@@ -1,2 +1,2 @@
-release: apt-get update && apt-get install -y libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libgobject-2.0-0 libglib2.0-0 libfontconfig1 libcairo2
+release: apt-get update && apt-get install -y libgobject-2.0-0 libglib2.0-0 libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf2.0-0 libharfbuzz0b libpangoft2-1.0-0 libfontconfig1 shared-mime-info fonts-dejavu-core
 worker: python3 telegram_document_bot.py

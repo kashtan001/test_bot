@@ -523,17 +523,236 @@ def build_contratto(data: dict) -> BytesIO:
 
 
 def build_lettera_garanzia(name: str) -> BytesIO:
-    """Генерация PDF письма о гарантии через WeasyPrint"""
-    template_data = {
-        'name': name
+    """Генерация PDF письма о гарантии с исправленной разметкой и изображениями через ReportLab - СТРОГО 1 СТРАНИЦА!"""
+    # Читаем оригинальный HTML шаблон
+    with open('garanzia.html', 'r', encoding='utf-8') as f:
+        html = f.read()
+    
+    # Добавляем CSS для правильной разметки - СТРОГО 1 СТРАНИЦА!
+    css_fixes = """
+    <style>
+    @page {
+        size: A4;
+        margin: 3mm;  /* Минимальный отступ - рамка ближе к краям */
+        border: 3pt solid #f17321;  /* Оранжевая рамка */
+        padding: 5mm;  /* Отступ от рамки до контента */
     }
     
-    html_content = render_template('garanzia.html', **template_data)
-    pdf_bytes = HTML(string=html_content).write_pdf()
+    body {
+        font-family: "Roboto Mono", monospace;
+        font-size: 11pt;  /* Увеличиваем размер шрифта */
+        line-height: 1.2;  /* Увеличиваем межстрочный интервал */
+        margin: 0;
+        padding: 0;
+    }
     
-    buf = BytesIO(pdf_bytes)
-    buf.seek(0)
-    return buf
+    /* СТРОГИЙ КОНТРОЛЬ: ТОЛЬКО 1 СТРАНИЦА для garanzia */
+    * {
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+        page-break-before: avoid !important;
+    }
+    
+    /* Запрещаем создание страниц после 1-й */
+    @page:nth(2) {
+        display: none !important;
+    }
+    
+    /* Убираем рамки из элементов, оставляем только @page */
+    .c9 {
+        border: none !important;
+        padding: 8pt !important;
+        margin: 0 !important;
+        width: 100% !important;  /* Занимаем всю ширину */
+    }
+    
+    /* Компактная таблица на всю ширину */
+    .c8 {
+        margin: 0 !important;
+        width: 100% !important;
+        margin-left: 0 !important;  /* Убираем отступ слева */
+    }
+    
+    /* Основной контейнер документа */
+    .c12 {
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Параграфы с нормальными отступами */
+    .c6 {
+        margin: 8pt 0 !important;  /* Возвращаем отступы между абзацами */
+        text-align: left !important;
+        width: 100% !important;
+    }
+    
+    /* Заголовки */
+    .c2 {
+        margin: 12pt 0 8pt 0 !important;  /* Отступы для заголовков */
+        text-align: left !important;
+    }
+    
+    /* Списки */
+    .c0 {
+        margin: 4pt 0 4pt 36pt !important;  /* Отступы для списков */
+        text-align: left !important;
+    }
+    
+    /* Убираем красное выделение */
+    .c15 {
+        background-color: transparent !important;
+        background: none !important;
+    }
+    
+    </style>
+    """
+    
+    # Вставляем CSS после тега <head>
+    html = html.replace('<head>', f'<head>{css_fixes}')
+    
+    # Убираем ВСЕ изображения из garanzia - они создают лишние страницы
+    # Убираем логотип в начале
+    logo_pattern = r'<p class="c6"><span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span></p>'
+    html = re.sub(logo_pattern, '', html)
+    
+    # Убираем изображения в конце (печать и подпись)
+    seal_pattern = r'<p class="c6"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span></p>'
+    html = re.sub(seal_pattern, '', html)
+    
+    signature_pattern = r'<span style="overflow: hidden[^>]*><img alt="" src="images/image3\.png"[^>]*></span>'
+    html = re.sub(signature_pattern, '', html)
+    
+    # Общая очистка для всех шаблонов
+    # Убираем лишние высоты из таблиц
+    html = html.replace('class="c5"', 'class="c5" style="height: auto !important;"')
+    html = html.replace('class="c9"', 'class="c9" style="height: auto !important;"')
+    
+    # Заменяем XXX на реальные данные
+    html = html.replace('XXX', name)
+    
+    # Конвертируем в PDF через WeasyPrint
+    pdf_bytes = HTML(string=html).write_pdf()
+    
+    # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
+    try:
+        # Создаем overlay с изображениями и сеткой
+        overlay_buffer = BytesIO()
+        overlay_canvas = canvas.Canvas(overlay_buffer, pagesize=A4)
+        
+        # Размер ячейки для расчета сдвигов
+        cell_width_mm = 210/25  # 8.4mm
+        cell_height_mm = 297/35  # 8.49mm
+        
+        # Добавляем company.png в 27-й клетке + 5 клеток вправо с уменьшением в 1.92 раза
+        company_img = Image.open("company.png")
+        company_width_mm = company_img.width * 0.264583  # пиксели в мм (96 DPI)
+        company_height_mm = company_img.height * 0.264583
+        
+        # Уменьшаем в 1.92 раза (было 2.5, увеличиваем на 30%)
+        company_scaled_width = company_width_mm / 1.92
+        company_scaled_height = company_height_mm / 1.92
+        
+        # Клетка 27 = строка 1, колонка 1 (27-1=26, 26//25=1, 26%25=1)
+        row_27 = (27 - 1) // 25  # строка 1
+        col_27 = (27 - 1) % 25   # колонка 1
+        
+        # Центр клетки 27 + смещение на 5 клеток вправо
+        x_27_center = (col_27 + 5 + 0.5) * cell_width_mm * mm  # центр по X + 5 клеток вправо
+        y_27_center = (297 - (row_27 + 0.5) * cell_height_mm) * mm  # центр по Y (ReportLab от низа)
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_27 = x_27_center - (company_scaled_width * mm / 2)
+        y_27 = y_27_center - (company_scaled_height * mm / 2)
+        
+        # Рисуем company.png в центре 27-й клетки
+        overlay_canvas.drawImage("company.png", x_27, y_27, 
+                               width=company_scaled_width*mm, height=company_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем seal.png в центр 590-й клетки с уменьшением в 5 раз
+        seal_img = Image.open("seal.png")
+        seal_width_mm = seal_img.width * 0.264583  # пиксели в мм (96 DPI)
+        seal_height_mm = seal_img.height * 0.264583
+        
+        # Уменьшаем в 5 раз
+        seal_scaled_width = seal_width_mm / 5
+        seal_scaled_height = seal_height_mm / 5
+        
+        # Клетка 590 = строка 23, колонка 14 (590-1=589, 589//25=23, 589%25=14)
+        row_590 = (590 - 1) // 25  # строка 23
+        col_590 = (590 - 1) % 25   # колонка 14
+        
+        # Центр клетки 590
+        x_590_center = (col_590 + 0.5) * cell_width_mm * mm  # центр по X
+        y_590_center = (297 - (row_590 + 0.5) * cell_height_mm) * mm  # центр по Y (ReportLab от низа)
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_590 = x_590_center - (seal_scaled_width * mm / 2)
+        y_590 = y_590_center - (seal_scaled_height * mm / 2)
+        
+        # Рисуем seal.png в центре 590-й клетки
+        overlay_canvas.drawImage("seal.png", x_590, y_590, 
+                               width=seal_scaled_width*mm, height=seal_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем sing_1.png в центр 593-й клетки с уменьшением в 5 раз
+        sing1_img = Image.open("sing_1.png")
+        sing1_width_mm = sing1_img.width * 0.264583  # пиксели в мм (96 DPI)
+        sing1_height_mm = sing1_img.height * 0.264583
+        
+        # Уменьшаем в 5 раз
+        sing1_scaled_width = sing1_width_mm / 5
+        sing1_scaled_height = sing1_height_mm / 5
+        
+        # Клетка 593 = строка 23, колонка 17 (593-1=592, 592//25=23, 592%25=17)
+        row_593 = (593 - 1) // 25  # строка 23
+        col_593 = (593 - 1) % 25   # колонка 17
+        
+        # Центр клетки 593
+        x_593_center = (col_593 + 0.5) * cell_width_mm * mm  # центр по X
+        y_593_center = (297 - (row_593 + 0.5) * cell_height_mm) * mm  # центр по Y (ReportLab от низа)
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_593 = x_593_center - (sing1_scaled_width * mm / 2)
+        y_593 = y_593_center - (sing1_scaled_height * mm / 2)
+        
+        # Рисуем sing_1.png в центре 593-й клетки
+        overlay_canvas.drawImage("sing_1.png", x_593, y_593, 
+                               width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        overlay_canvas.save()
+        
+        # Объединяем PDF с overlay
+        overlay_buffer.seek(0)
+        base_pdf = PdfReader(BytesIO(pdf_bytes))
+        overlay_pdf = PdfReader(overlay_buffer)
+        
+        writer = PdfWriter()
+        
+        # Накладываем изображения на каждую страницу
+        for i, page in enumerate(base_pdf.pages):
+            if i < len(overlay_pdf.pages):
+                page.merge_page(overlay_pdf.pages[i])
+            writer.add_page(page)
+        
+        # Сохраняем финальный PDF
+        final_buffer = BytesIO()
+        writer.write(final_buffer)
+        final_pdf_bytes = final_buffer.getvalue()
+        
+        buf = BytesIO(final_pdf_bytes)
+        buf.seek(0)
+        return buf
+        
+    except Exception as e:
+        # Если ошибка с ReportLab, возвращаем обычный PDF
+        print(f"Ошибка ReportLab: {e}")
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
 
 
 def build_lettera_carta(data: dict) -> BytesIO:
