@@ -19,7 +19,7 @@ from telegram.ext import (
     Application, CommandHandler, ConversationHandler, MessageHandler, ContextTypes, filters,
 )
 
-from weasyprint import HTML, CSS
+from weasyprint import HTML
 from jinja2 import Template, FileSystemLoader, Environment
 from datetime import datetime
 from reportlab.pdfgen import canvas
@@ -64,7 +64,7 @@ def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
 
 def init_jinja_env():
     """Инициализация Jinja2 окружения для шаблонов"""
-    env = Environment(loader=FileSystemLoader('templates'))
+    env = Environment(loader=FileSystemLoader('.'))
     return env
 
 
@@ -517,9 +517,9 @@ def build_contratto(data: dict) -> BytesIO:
     except Exception as e:
         # Если ошибка с ReportLab, возвращаем обычный PDF
         print(f"Ошибка ReportLab: {e}")
-        buf = BytesIO(pdf_bytes)
-        buf.seek(0)
-        return buf
+    buf = BytesIO(pdf_bytes)
+    buf.seek(0)
+    return buf
 
 
 def build_lettera_garanzia(name: str) -> BytesIO:
@@ -552,6 +552,8 @@ def build_lettera_carta(data: dict) -> BytesIO:
     buf = BytesIO(pdf_bytes)
     buf.seek(0)
     return buf
+
+
 
 # ------------------------- Handlers -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
