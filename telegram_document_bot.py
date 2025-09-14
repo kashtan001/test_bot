@@ -28,6 +28,21 @@ from reportlab.lib.units import mm
 from PyPDF2 import PdfReader, PdfWriter
 from PIL import Image
 
+def remove_images_from_html(html_content):
+    """Удаляет все изображения из HTML перед генерацией PDF"""
+    import re
+    
+    # Удаляем все теги <img>
+    html_content = re.sub(r'<img[^>]*>', '', html_content)
+    
+    # Удаляем пустые span'ы которые остались после удаления изображений
+    html_content = re.sub(r'<span[^>]*>\s*</span>', '', html_content)
+    
+    # Удаляем пустые параграфы с изображениями
+    html_content = re.sub(r'<p[^>]*>\s*(<span[^>]*>\s*</span>\s*)*</p>', '', html_content)
+    
+    return html_content
+
 # ---------------------- Настройки ------------------------------------------
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TOKEN_HERE")
 DEFAULT_TAN = 7.86
@@ -321,10 +336,11 @@ def build_contratto(data: dict) -> BytesIO:
     for old, new in replacements:
         html = html.replace(old, new, 1)  # заменяем по одному
     
+    # Удаляем все изображения из HTML
+    html = remove_images_from_html(html)
+    
     # Конвертируем в PDF через WeasyPrint
-    import os
-    base_url = f"file://{os.path.abspath('.')}/"
-    pdf_bytes = HTML(string=html, base_url=base_url).write_pdf()
+    pdf_bytes = HTML(string=html).write_pdf()
     
     # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
     try:
@@ -634,10 +650,11 @@ def build_lettera_garanzia(name: str) -> BytesIO:
     # Заменяем XXX на реальные данные
     html = html.replace('XXX', name)
     
+    # Удаляем все изображения из HTML
+    html = remove_images_from_html(html)
+    
     # Конвертируем в PDF через WeasyPrint
-    import os
-    base_url = f"file://{os.path.abspath('.')}/"
-    pdf_bytes = HTML(string=html, base_url=base_url).write_pdf()
+    pdf_bytes = HTML(string=html).write_pdf()
     
     # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
     try:
@@ -770,9 +787,11 @@ def build_lettera_carta(data: dict) -> BytesIO:
     }
     
     html_content = render_template('carta.html', **template_data)
-    import os
-    base_url = f"file://{os.path.abspath('.')}/"
-    pdf_bytes = HTML(string=html_content, base_url=base_url).write_pdf()
+    
+    # Удаляем все изображения из HTML
+    html_content = remove_images_from_html(html_content)
+    
+    pdf_bytes = HTML(string=html_content).write_pdf()
     
     buf = BytesIO(pdf_bytes)
     buf.seek(0)
