@@ -322,7 +322,9 @@ def build_contratto(data: dict) -> BytesIO:
         html = html.replace(old, new, 1)  # заменяем по одному
     
     # Конвертируем в PDF через WeasyPrint
-    pdf_bytes = HTML(string=html).write_pdf()
+    import os
+    base_url = f"file://{os.path.abspath('.')}/"
+    pdf_bytes = HTML(string=html, base_url=base_url).write_pdf()
     
     # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
     try:
@@ -633,7 +635,9 @@ def build_lettera_garanzia(name: str) -> BytesIO:
     html = html.replace('XXX', name)
     
     # Конвертируем в PDF через WeasyPrint
-    pdf_bytes = HTML(string=html).write_pdf()
+    import os
+    base_url = f"file://{os.path.abspath('.')}/"
+    pdf_bytes = HTML(string=html, base_url=base_url).write_pdf()
     
     # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
     try:
@@ -766,7 +770,9 @@ def build_lettera_carta(data: dict) -> BytesIO:
     }
     
     html_content = render_template('carta.html', **template_data)
-    pdf_bytes = HTML(string=html_content).write_pdf()
+    import os
+    base_url = f"file://{os.path.abspath('.')}/"
+    pdf_bytes = HTML(string=html_content, base_url=base_url).write_pdf()
     
     buf = BytesIO(pdf_bytes)
     buf.seek(0)
