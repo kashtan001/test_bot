@@ -135,9 +135,10 @@ def build_contratto(data: dict) -> BytesIO:
     p {
         margin: 2pt 0 !important;  /* Нормальные отступы между параграфами */
         padding: 0 !important;
-        line-height: 1.2 !important;  /* Увеличиваем для лучшей читаемости */
-        word-wrap: break-word !important;  /* Перенос длинных слов */
+        line-height: 1.0 !important;
+        word-wrap: break-word !important;
         overflow-wrap: break-word !important;
+        hyphens: auto !important;
     }
     
     div {
@@ -148,16 +149,18 @@ def build_contratto(data: dict) -> BytesIO:
     table {
         margin: 3pt 0 !important;  /* Нормальные отступы для таблиц */
         font-size: 10pt !important;  /* Нормальный размер шрифта */
-        table-layout: fixed !important;  /* Фиксированная ширина столбцов */
         width: 100% !important;
         border-collapse: collapse !important;
+        table-layout: fixed !important;
     }
     
     td, th {
+        padding: 2pt !important;
+        margin: 0 !important;
+        vertical-align: top !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
-        padding: 2pt !important;
-        vertical-align: top !important;
+        hyphens: auto !important;
     }
     
     /* Убираем Google Docs стили */
@@ -428,8 +431,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем sing_2.png в квадрат 637 второй страницы с уменьшением в 7 раз
         # Квадрат 637 = строка 25, колонка 12 (637-1=636, 636//25=25, 636%25=11)
-        row_637 = (637 - 1) // 25  # строка 25 (636//25=25)
-        col_637 = (637 - 1) % 25   # колонка 12 (636%25=11, но нумерация с 1, поэтому 12)
+        row_637 = (637 - 1) // 25  # строка 25
+        col_637 = (637 - 1) % 25   # колонка 11
         
         # Получаем размер sing_2.png для уменьшения в 7 раз
         sing_img = Image.open("sing_2.png")
@@ -440,9 +443,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing_scaled_width = (sing_width_mm / 7) * 0.9  # -10%
         sing_scaled_height = (sing_height_mm / 7) * 0.9
         
-        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вниз на 0.5 клетки
+        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вверх на 0.5 клетки (поднято на 1 клетку)
         x_637 = (col_637 - 1) * cell_width_mm * mm  # влево на 1 клетку
-        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm) * mm  # вниз на 0.5 клетки
+        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) + 0.5 * cell_height_mm) * mm  # вверх на 0.5 клетки
         
         # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
@@ -451,8 +454,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем sing_1.png в квадрат 628 второй страницы с уменьшением в 6 раз
         # Квадрат 628 = строка 25, колонка 3 (628-1=627, 627//25=25, 627%25=2)
-        row_628 = (628 - 1) // 25  # строка 25 (627//25=25)
-        col_628 = (628 - 1) % 25   # колонка 3 (627%25=2, но нумерация с 1, поэтому 3)
+        row_628 = (628 - 1) // 25  # строка 25
+        col_628 = (628 - 1) % 25   # колонка 2
         
         # Получаем размер sing_1.png для уменьшения в 6 раз
         sing1_img = Image.open("sing_1.png")
@@ -463,9 +466,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing1_scaled_width = (sing1_width_mm / 6) * 1.1  # +10%
         sing1_scaled_height = (sing1_height_mm / 6) * 1.1
         
-        # Левая грань квадрата 628 + сдвиг на 2 клетки вниз
+        # Левая грань квадрата 628 + сдвиг на 1 клетку вниз (поднято на 1 клетку)
         x_628 = col_628 * cell_width_mm * mm
-        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 2 * cell_height_mm) * mm  # вниз на 2 клетки
+        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 1 * cell_height_mm) * mm  # вниз на 1 клетку
         
         # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
@@ -474,8 +477,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем seal.png в квадрат 682 второй страницы с уменьшением в 7 раз
         # Квадрат 682 = строка 27, колонка 7 (682-1=681, 681//25=27, 681%25=6)
-        row_682 = (682 - 1) // 25  # строка 27 (681//25=27)
-        col_682 = (682 - 1) % 25   # колонка 7 (681%25=6, но нумерация с 1, поэтому 7)
+        row_682 = (682 - 1) // 25  # строка 27
+        col_682 = (682 - 1) % 25   # колонка 6
         
         # Получаем размер seal.png для уменьшения в 7 раз
         seal_img = Image.open("seal.png")
@@ -486,9 +489,9 @@ def build_contratto(data: dict) -> BytesIO:
         seal_scaled_width = seal_width_mm / 7
         seal_scaled_height = seal_height_mm / 7
         
-        # Левая грань квадрата 682
+        # Левая грань квадрата 682 + поднято на 1 клетку
         x_682 = col_682 * cell_width_mm * mm
-        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm
+        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm + cell_height_mm * mm
         
         # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("seal.png", x_682, y_682, 
@@ -565,6 +568,9 @@ def build_lettera_garanzia(name: str) -> BytesIO:
         line-height: 1.2;  /* Увеличиваем межстрочный интервал */
         margin: 0;
         padding: 0;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto !important;
     }
     
     /* СТРОГИЙ КОНТРОЛЬ: ТОЛЬКО 1 СТРАНИЦА для garanzia */
@@ -592,6 +598,25 @@ def build_lettera_garanzia(name: str) -> BytesIO:
         margin: 0 !important;
         width: 100% !important;
         margin-left: 0 !important;  /* Убираем отступ слева */
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+    }
+
+    /* Табличные правила для стабильных переносов */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        font-size: 11pt !important;
+    }
+
+    td, th {
+        padding: 2pt !important;
+        margin: 0 !important;
+        vertical-align: top !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto !important;
     }
     
     /* Основной контейнер документа */
@@ -609,7 +634,7 @@ def build_lettera_garanzia(name: str) -> BytesIO:
         width: 100% !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
-        line-height: 1.3 !important;  /* Хорошая читаемость */
+        hyphens: auto !important;
     }
     
     /* Заголовки */
@@ -806,6 +831,9 @@ def build_lettera_carta(data: dict) -> BytesIO:
         margin: 0;
         padding: 0;
         overflow: hidden;  /* Предотвращаем выход за границы */
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto !important;
     }
     
     /* СТРОГИЙ КОНТРОЛЬ: ТОЛЬКО 1 СТРАНИЦА для carta */
@@ -814,6 +842,9 @@ def build_lettera_carta(data: dict) -> BytesIO:
         page-break-inside: avoid !important;
         page-break-before: avoid !important;
         overflow: hidden !important;  /* Обрезаем контент если он не помещается */
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto !important;
     }
     
     /* Запрещаем создание страниц после 1-й */
@@ -847,10 +878,11 @@ def build_lettera_carta(data: dict) -> BytesIO:
         padding: 0 !important;
         text-align: left !important;
         width: 100% !important;
-        line-height: 1.1 !important;  /* Чуть увеличиваем для читаемости */
+        line-height: 1.0 !important;
+        overflow: hidden !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
-        overflow: visible !important;  /* Позволяем тексту переноситься */
+        hyphens: auto !important;
     }
     
     /* Таблицы компактные */
@@ -860,16 +892,18 @@ def build_lettera_carta(data: dict) -> BytesIO:
         width: 100% !important;
         font-size: 9pt !important;
         border-collapse: collapse !important;
+        table-layout: fixed !important;
     }
     
     td, th {
         padding: 1pt !important;
         margin: 0 !important;
         font-size: 9pt !important;
-        line-height: 1.1 !important;
+        line-height: 1.0 !important;
+        vertical-align: top !important;
         word-wrap: break-word !important;
         overflow-wrap: break-word !important;
-        vertical-align: top !important;
+        hyphens: auto !important;
     }
     
     /* Убираем красное выделение и фоны */
