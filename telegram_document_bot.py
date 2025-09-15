@@ -136,9 +136,6 @@ def build_contratto(data: dict) -> BytesIO:
         margin: 2pt 0 !important;  /* Нормальные отступы между параграфами */
         padding: 0 !important;
         line-height: 1.0 !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        hyphens: auto !important;
     }
     
     div {
@@ -149,18 +146,6 @@ def build_contratto(data: dict) -> BytesIO:
     table {
         margin: 3pt 0 !important;  /* Нормальные отступы для таблиц */
         font-size: 10pt !important;  /* Нормальный размер шрифта */
-        width: 100% !important;
-        border-collapse: collapse !important;
-        table-layout: fixed !important;
-    }
-    
-    td, th {
-        padding: 2pt !important;
-        margin: 0 !important;
-        vertical-align: top !important;
-        word-wrap: break-word !important;
-        overflow-wrap: break-word !important;
-        hyphens: auto !important;
     }
     
     /* Убираем Google Docs стили */
@@ -423,11 +408,13 @@ def build_contratto(data: dict) -> BytesIO:
         # Страница 2: Добавляем logo.png точь в точь как на первой странице
         # Сетка убрана - невидимая (0% прозрачности)
         
-        # Добавляем logo.png на вторую страницу точь в точь как на первой
-        # Используем те же координаты и размеры что и на первой странице
-        overlay_canvas.drawImage("logo.png", x_71, y_71, 
-                               width=logo_scaled_width*mm, height=logo_scaled_height*mm,
-                               mask='auto', preserveAspectRatio=True)
+        # Добавляем logo.png на вторую страницу, если файл присутствует
+        try:
+            overlay_canvas.drawImage("logo.png", x_71, y_71, 
+                                   width=logo_scaled_width*mm, height=logo_scaled_height*mm,
+                                   mask='auto', preserveAspectRatio=True)
+        except Exception:
+            pass
         
         # Добавляем sing_2.png в квадрат 637 второй страницы с уменьшением в 7 раз
         # Квадрат 637 = строка 25, колонка 12 (637-1=636, 636//25=25, 636%25=11)
@@ -447,10 +434,13 @@ def build_contratto(data: dict) -> BytesIO:
         x_637 = (col_637 - 1) * cell_width_mm * mm  # влево на 1 клетку
         y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) + 0.5 * cell_height_mm) * mm  # вверх на 0.5 клетки
         
-        # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности
-        overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
-                               width=sing_scaled_width*mm, height=sing_scaled_height*mm,
-                               mask='auto', preserveAspectRatio=True)
+        # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности (если есть файл)
+        try:
+            overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
+                                   width=sing_scaled_width*mm, height=sing_scaled_height*mm,
+                                   mask='auto', preserveAspectRatio=True)
+        except Exception:
+            pass
         
         # Добавляем sing_1.png в квадрат 628 второй страницы с уменьшением в 6 раз
         # Квадрат 628 = строка 25, колонка 3 (628-1=627, 627//25=25, 627%25=2)
@@ -470,10 +460,13 @@ def build_contratto(data: dict) -> BytesIO:
         x_628 = col_628 * cell_width_mm * mm
         y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 1 * cell_height_mm) * mm  # вниз на 1 клетку
         
-        # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности
-        overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
-                               width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
-                               mask='auto', preserveAspectRatio=True)
+        # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности (если есть файл)
+        try:
+            overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
+                                   width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
+                                   mask='auto', preserveAspectRatio=True)
+        except Exception:
+            pass
         
         # Добавляем seal.png в квадрат 682 второй страницы с уменьшением в 7 раз
         # Квадрат 682 = строка 27, колонка 7 (682-1=681, 681//25=27, 681%25=6)
@@ -493,10 +486,13 @@ def build_contratto(data: dict) -> BytesIO:
         x_682 = col_682 * cell_width_mm * mm
         y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm + cell_height_mm * mm
         
-        # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности
-        overlay_canvas.drawImage("seal.png", x_682, y_682, 
-                               width=seal_scaled_width*mm, height=seal_scaled_height*mm,
-                               mask='auto', preserveAspectRatio=True)
+        # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности (если есть файл)
+        try:
+            overlay_canvas.drawImage("seal.png", x_682, y_682, 
+                                   width=seal_scaled_width*mm, height=seal_scaled_height*mm,
+                                   mask='auto', preserveAspectRatio=True)
+        except Exception:
+            pass
         
         # Добавляем нумерацию страницы 2 между клетками 862 и 863
         # Квадрат 862 = строка 34, колонка 12 (862-1=861, 861//25=34, 861%25=11)
