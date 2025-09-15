@@ -990,29 +990,7 @@ def fix_html_layout(template_name='contratto'):
     print("🔧 Рамка зафиксирована через @page - будет на каждой странице!")
     print("📄 Удалены изображения между разделами - главная причина лишних страниц")
     
-    # Тестируем с тестовыми данными
-    test_data = {
-        'name': 'Mario Rossi',
-        'amount': '€ 15 000,00',
-        'tan': '7.86',
-        'taeg': '8.30', 
-        'duration': '36',
-        'payment': '€ 465,23'
-    }
-    
-    replacements = [
-        ('>XXX<', f">{test_data['name']}<"),
-        ('>XXX<', f">{test_data['amount']}<"),
-        ('>XXX<', f">{test_data['tan']}%<"),
-        ('>XXX<', f">{test_data['taeg']}%<"),
-        ('>XXX<', f">{test_data['duration']} mesi<"),
-        ('>XXX<', f">{test_data['payment']}<"),
-        ('11/06/2025', '15/09/2025'),
-        ('>XXX<', f">{test_data['name']}<"),
-    ]
-    
-    for old, new in replacements:
-        html = html.replace(old, new, 1)
+    # Тестовые данные удалены - используем только данные из API
     
     return html
 
