@@ -428,9 +428,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing_scaled_width = (sing_width_mm / 7) * 0.9  # -10%
         sing_scaled_height = (sing_height_mm / 7) * 0.9
         
-        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вниз на 0.5 клетки
+        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вверх на 0.5 клетки (было вниз на 0.5)
         x_637 = (col_637 - 1) * cell_width_mm * mm  # влево на 1 клетку
-        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm) * mm  # вниз на 0.5 клетки
+        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) + 0.5 * cell_height_mm) * mm  # вверх на 0.5 клетки (было вниз)
         
         # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
@@ -451,9 +451,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing1_scaled_width = (sing1_width_mm / 6) * 1.1  # +10%
         sing1_scaled_height = (sing1_height_mm / 6) * 1.1
         
-        # Левая грань квадрата 628 + сдвиг на 2 клетки вниз
+        # Левая грань квадрата 628 + сдвиг на 1 клетку вниз (было 2, сместили на 1 вверх)
         x_628 = col_628 * cell_width_mm * mm
-        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 2 * cell_height_mm) * mm  # вниз на 2 клетки
+        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 1 * cell_height_mm) * mm  # вниз на 1 клетку (было 2)
         
         # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
@@ -474,9 +474,9 @@ def build_contratto(data: dict) -> BytesIO:
         seal_scaled_width = seal_width_mm / 7
         seal_scaled_height = seal_height_mm / 7
         
-        # Левая грань квадрата 682
+        # Левая грань квадрата 682 + сдвиг вверх на 1 клетку
         x_682 = col_682 * cell_width_mm * mm
-        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm
+        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm + cell_height_mm * mm  # +1 клетка вверх
         
         # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("seal.png", x_682, y_682, 
@@ -1072,9 +1072,9 @@ def build_lettera_carta(data: dict) -> BytesIO:
     except Exception as e:
         # Если ошибка с ReportLab, возвращаем обычный PDF
         print(f"Ошибка ReportLab: {e}")
-        buf = BytesIO(pdf_bytes)
-        buf.seek(0)
-        return buf
+    buf = BytesIO(pdf_bytes)
+    buf.seek(0)
+    return buf
 
 
 
