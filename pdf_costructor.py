@@ -165,16 +165,16 @@ def _add_images_to_pdf(pdf_bytes: bytes, template_name: str) -> BytesIO:
             company_width_mm = company_img.width * 0.264583  # пиксели в мм (96 DPI)
             company_height_mm = company_img.height * 0.264583
             
-            # Уменьшаем в 1.92 раза
-            company_scaled_width = company_width_mm / 1.92
-            company_scaled_height = company_height_mm / 1.92
+            # Уменьшаем в 1.6 раза (было 1.92, увеличиваем на 20%)
+            company_scaled_width = company_width_mm / 1.6
+            company_scaled_height = company_height_mm / 1.6
             
             # Клетка 27 = строка 1, колонка 1 + сдвиг на 5 клеток вправо
             row_27 = (27 - 1) // 25  # строка 1
             col_27 = (27 - 1) % 25   # колонка 1
             
-            # Центр клетки 27 + смещение на 5 клеток вправо
-            x_27_center = (col_27 + 5 + 0.5) * cell_width_mm * mm
+            # Центр клетки 27 + смещение на 5 клеток вправо + 1.25 клетки правее
+            x_27_center = (col_27 + 5 + 0.5 + 1.25) * cell_width_mm * mm
             y_27_center = (297 - (row_27 + 0.5) * cell_height_mm) * mm
             
             # Смещаем на половину размера изображения для центрирования
