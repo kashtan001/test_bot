@@ -5,8 +5,11 @@ httpcore>=1.0.0,<2.0.0
 
 # PDF generation
 reportlab>=4.0.0,<5.0.0
-PyPDF2>=3.0.0,<4.0.0
 weasyprint>=60.0,<61.0
+
+# PDF manipulation - try both versions for compatibility
+PyPDF2>=3.0.0,<4.0.0
+pypdf>=4.0.0,<5.0.0
 
 # Image processing
 pillow>=10.0.0,<11.0.0

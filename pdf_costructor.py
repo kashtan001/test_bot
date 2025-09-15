@@ -614,7 +614,10 @@ if __name__ == '__main__':
                 from reportlab.pdfgen import canvas
                 from reportlab.lib.pagesizes import A4
                 from reportlab.lib.units import mm
-                from PyPDF2 import PdfReader, PdfWriter
+                try:
+                    from PyPDF2 import PdfReader, PdfWriter
+                except ImportError:
+                    from pypdf import PdfReader, PdfWriter
                 from io import BytesIO
                 
                 # Создаем overlay с изображениями и/или сеткой
@@ -1047,6 +1050,13 @@ if __name__ == '__main__':
                 with open(output_pdf, 'wb') as f:
                     f.write(pdf_bytes)
                 print(f"✅ Обычный PDF создан! Размер: {len(pdf_bytes)} байт")
+            except Exception as e:
+                print(f"❌ Ошибка при обработке изображений: {e}")
+                # Сохраняем обычный PDF без изображений
+                output_pdf = args.output
+                with open(output_pdf, 'wb') as f:
+                    f.write(pdf_bytes)
+                print(f"✅ Обычный PDF создан без изображений! Размер: {len(pdf_bytes)} байт")
         else:
             # Для других шаблонов - простой PDF без изображений
             output_pdf = args.output
