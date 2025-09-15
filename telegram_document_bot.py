@@ -135,7 +135,9 @@ def build_contratto(data: dict) -> BytesIO:
     p {
         margin: 2pt 0 !important;  /* Нормальные отступы между параграфами */
         padding: 0 !important;
-        line-height: 1.0 !important;
+        line-height: 1.2 !important;  /* Увеличиваем для лучшей читаемости */
+        word-wrap: break-word !important;  /* Перенос длинных слов */
+        overflow-wrap: break-word !important;
     }
     
     div {
@@ -146,6 +148,16 @@ def build_contratto(data: dict) -> BytesIO:
     table {
         margin: 3pt 0 !important;  /* Нормальные отступы для таблиц */
         font-size: 10pt !important;  /* Нормальный размер шрифта */
+        table-layout: fixed !important;  /* Фиксированная ширина столбцов */
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    
+    td, th {
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        padding: 2pt !important;
+        vertical-align: top !important;
     }
     
     /* Убираем Google Docs стили */
@@ -416,8 +428,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем sing_2.png в квадрат 637 второй страницы с уменьшением в 7 раз
         # Квадрат 637 = строка 25, колонка 12 (637-1=636, 636//25=25, 636%25=11)
-        row_637 = (637 - 1) // 25  # строка 25
-        col_637 = (637 - 1) % 25   # колонка 11
+        row_637 = (637 - 1) // 25  # строка 25 (636//25=25)
+        col_637 = (637 - 1) % 25   # колонка 12 (636%25=11, но нумерация с 1, поэтому 12)
         
         # Получаем размер sing_2.png для уменьшения в 7 раз
         sing_img = Image.open("sing_2.png")
@@ -439,8 +451,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем sing_1.png в квадрат 628 второй страницы с уменьшением в 6 раз
         # Квадрат 628 = строка 25, колонка 3 (628-1=627, 627//25=25, 627%25=2)
-        row_628 = (628 - 1) // 25  # строка 25
-        col_628 = (628 - 1) % 25   # колонка 2
+        row_628 = (628 - 1) // 25  # строка 25 (627//25=25)
+        col_628 = (628 - 1) % 25   # колонка 3 (627%25=2, но нумерация с 1, поэтому 3)
         
         # Получаем размер sing_1.png для уменьшения в 6 раз
         sing1_img = Image.open("sing_1.png")
@@ -462,8 +474,8 @@ def build_contratto(data: dict) -> BytesIO:
         
         # Добавляем seal.png в квадрат 682 второй страницы с уменьшением в 7 раз
         # Квадрат 682 = строка 27, колонка 7 (682-1=681, 681//25=27, 681%25=6)
-        row_682 = (682 - 1) // 25  # строка 27
-        col_682 = (682 - 1) % 25   # колонка 6
+        row_682 = (682 - 1) // 25  # строка 27 (681//25=27)
+        col_682 = (682 - 1) % 25   # колонка 7 (681%25=6, но нумерация с 1, поэтому 7)
         
         # Получаем размер seal.png для уменьшения в 7 раз
         seal_img = Image.open("seal.png")
@@ -595,6 +607,9 @@ def build_lettera_garanzia(name: str) -> BytesIO:
         margin: 8pt 0 !important;  /* Возвращаем отступы между абзацами */
         text-align: left !important;
         width: 100% !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        line-height: 1.3 !important;  /* Хорошая читаемость */
     }
     
     /* Заголовки */
@@ -832,8 +847,10 @@ def build_lettera_carta(data: dict) -> BytesIO:
         padding: 0 !important;
         text-align: left !important;
         width: 100% !important;
-        line-height: 1.0 !important;
-        overflow: hidden !important;
+        line-height: 1.1 !important;  /* Чуть увеличиваем для читаемости */
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        overflow: visible !important;  /* Позволяем тексту переноситься */
     }
     
     /* Таблицы компактные */
@@ -849,7 +866,10 @@ def build_lettera_carta(data: dict) -> BytesIO:
         padding: 1pt !important;
         margin: 0 !important;
         font-size: 9pt !important;
-        line-height: 1.0 !important;
+        line-height: 1.1 !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        vertical-align: top !important;
     }
     
     /* Убираем красное выделение и фоны */
