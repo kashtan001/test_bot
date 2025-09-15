@@ -237,37 +237,6 @@ def build_contratto(data: dict) -> BytesIO:
         position: absolute;
         z-index: 500;
     }
-    
-    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ЭЛЕМЕНТОВ С ДАННЫМИ */
-    /* Фиксируем размеры ячеек с данными для стабильного позиционирования */
-    .c5 {
-        width: 272.9pt !important;
-        min-height: 20pt !important;
-        max-height: 25pt !important;
-        overflow: hidden !important;
-    }
-    
-    /* Фиксируем размеры текста с данными */
-    .c1, .c16 {
-        display: inline-block !important;
-        min-width: 80pt !important;
-        max-width: 200pt !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-    }
-    
-    /* Фиксируем высоту строк таблицы */
-    .c25 tr {
-        height: 25pt !important;
-    }
-    
-    /* Стабилизируем контейнер документа */
-    .c20 {
-        min-height: 774.4pt !important;
-        max-height: 774.4pt !important;
-        overflow: hidden !important;
-    }
     </style>
     """
     
@@ -646,21 +615,6 @@ def build_lettera_garanzia(name: str) -> BytesIO:
         background: none !important;
     }
     
-    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ДЛЯ СТАБИЛЬНОСТИ */
-    /* Фиксируем размеры элементов с данными */
-    .c6 {
-        min-height: 15pt !important;
-        max-height: 20pt !important;
-        overflow: hidden !important;
-    }
-    
-    /* Стабилизируем контейнер */
-    .c9 {
-        min-height: 600pt !important;
-        max-height: 700pt !important;
-        overflow: hidden !important;
-    }
-    
     </style>
     """
     
@@ -941,34 +895,6 @@ def build_lettera_carta(data: dict) -> BytesIO:
         color: transparent;
         font-family: Arial, sans-serif;
         box-sizing: border-box;
-    }
-    
-    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ДЛЯ CARTA */
-    /* Фиксируем размеры элементов с данными для стабильности */
-    .c6, .c0, .c2, .c3 {
-        min-height: 12pt !important;
-        max-height: 15pt !important;
-        overflow: hidden !important;
-        white-space: nowrap !important;
-    }
-    
-    /* Стабилизируем контейнер carta */
-    .c12 {
-        min-height: 600pt !important;
-        max-height: 700pt !important;
-        overflow: hidden !important;
-    }
-    
-    /* Фиксируем размеры таблиц */
-    table {
-        table-layout: fixed !important;
-        width: 100% !important;
-    }
-    
-    td, th {
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
     }
     
     </style>
