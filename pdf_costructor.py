@@ -605,8 +605,9 @@ if __name__ == '__main__':
     
     # Тестируем конвертацию
     try:
-        from weasyprint import HTML
-        pdf_bytes = HTML(string=fixed_html).write_pdf()
+        from weasyprint import HTML, CSS
+        html_doc = HTML(string=fixed_html)
+        pdf_bytes = html_doc.write_pdf()
         
         # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ И СЕТКУ ЧЕРЕЗ REPORTLAB
         if template in ['contratto', 'garanzia', 'carta']:
@@ -614,10 +615,15 @@ if __name__ == '__main__':
                 from reportlab.pdfgen import canvas
                 from reportlab.lib.pagesizes import A4
                 from reportlab.lib.units import mm
+                # Try new pypdf first, fallback to PyPDF2
                 try:
-                    from PyPDF2 import PdfReader, PdfWriter
-                except ImportError:
                     from pypdf import PdfReader, PdfWriter
+                except ImportError:
+                    try:
+                        from PyPDF2 import PdfReader, PdfWriter
+                    except ImportError:
+                        print("❌ Нужна библиотека: pip install pypdf или PyPDF2")
+                        raise
                 from io import BytesIO
                 
                 # Создаем overlay с изображениями и/или сеткой
@@ -1043,7 +1049,7 @@ if __name__ == '__main__':
                 print(f"📄 Файл сохранен как {output_pdf}")
                 
             except ImportError as e:
-                print(f"❌ Нужны библиотеки: pip install reportlab PyPDF2")
+                print(f"❌ Нужны библиотеки: pip install reportlab pypdf")
                 print(f"❌ Ошибка импорта: {e}")
                 # Сохраняем обычный PDF без изображений
                 output_pdf = args.output
@@ -1056,7 +1062,7 @@ if __name__ == '__main__':
                 output_pdf = args.output
                 with open(output_pdf, 'wb') as f:
                     f.write(pdf_bytes)
-                print(f"✅ Обычный PDF создан без изображений! Размер: {len(pdf_bytes)} байт")
+                print(f"✅ Обычный PDF создан! Размер: {len(pdf_bytes)} байт")
         else:
             # Для других шаблонов - простой PDF без изображений
             output_pdf = args.output
@@ -1065,7 +1071,13 @@ if __name__ == '__main__':
             print(f"✅ PDF создан! Размер: {len(pdf_bytes)} байт")
             print(f"📄 Файл сохранен как {output_pdf}")
         
-    except ImportError:
-        print("❌ Нужен WeasyPrint для тестирования")
+    except ImportError as e:
+        print(f"❌ Нужен WeasyPrint: pip install weasyprint")
+        print(f"❌ Ошибка импорта: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ Ошибка при генерации PDF: {e}")
+        import traceback
+        print("Полный traceback:")
+        traceback.print_exc()
+        sys.exit(1)

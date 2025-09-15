@@ -97,6 +97,10 @@ def build_pdf_external(doc: str, payload: dict) -> BytesIO:
         completed = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         logging.info("pdf_costructor output: %s", completed.stdout)
         
+        # Проверяем stderr на наличие ошибок
+        if completed.stderr:
+            logging.error("pdf_costructor stderr: %s", completed.stderr)
+        
         # Проверяем, что файл создался и не пустой
         if not os.path.exists(tmp_path):
             logging.error("PDF file was not created: %s", tmp_path)
@@ -105,6 +109,7 @@ def build_pdf_external(doc: str, payload: dict) -> BytesIO:
         file_size = os.path.getsize(tmp_path)
         if file_size == 0:
             logging.error("PDF file is empty: %s", tmp_path)
+            logging.error("Possible cause: WeasyPrint or library compatibility issue")
             raise ValueError(f"PDF file is empty: {tmp_path}")
             
         logging.info("PDF file created successfully, size: %d bytes", file_size)
@@ -115,7 +120,9 @@ def build_pdf_external(doc: str, payload: dict) -> BytesIO:
         buf.seek(0)
         return buf
     except subprocess.CalledProcessError as e:
-        logging.error("pdf_costructor failed: %s", e.stderr)
+        logging.error("pdf_costructor failed with return code %d", e.returncode)
+        logging.error("stdout: %s", e.stdout)
+        logging.error("stderr: %s", e.stderr)
         raise
     finally:
         try:

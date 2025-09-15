@@ -5,17 +5,25 @@ httpcore>=1.0.0,<2.0.0
 
 # PDF generation
 reportlab>=4.0.0,<5.0.0
-weasyprint>=60.0,<61.0
+weasyprint>=56.0,<62.0
 
-# PDF manipulation - try both versions for compatibility
-PyPDF2>=3.0.0,<4.0.0
+# PDF manipulation - use pypdf (newer) or fallback to PyPDF2
 pypdf>=4.0.0,<5.0.0
+PyPDF2>=3.0.0,<4.0.0
 
 # Image processing
-pillow>=10.0.0,<11.0.0
+pillow>=10.0.0,<12.0.0
 
 # Template engine
 jinja2>=3.1.0,<4.0.0
+
+# WeasyPrint dependencies
+pydyf>=0.5.0,<1.0.0
+cffi>=1.15.0
+cssselect2>=0.6.0
+html5lib>=1.1.0
+tinycss2>=1.2.0
+fonttools>=4.0.0
 
 # Additional dependencies
 anyio>=4.0.0,<5.0.0
@@ -23,4 +31,3 @@ certifi>=2024.0.0
 charset-normalizer>=3.0.0,<4.0.0
 idna>=3.0.0,<4.0.0
 sniffio>=1.3.0,<2.0.0
-pydyf>=0.5.0,<1.0.0
