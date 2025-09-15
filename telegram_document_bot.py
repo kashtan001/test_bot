@@ -293,6 +293,7 @@ def build_contratto(data: dict) -> BytesIO:
     # КРИТИЧНО: СНАЧАЛА убираем старые изображения, ПОТОМ добавляем новые!
     import re
     
+    # Очистка HTML для contratto (как в fix_layout.py)
     # 1. ПОЛНОСТЬЮ убираем блок с 3 изображениями между разделами
     middle_images_pattern = r'<p class="c3"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image4\.png"[^>]*></span></p>'
     html = re.sub(middle_images_pattern, '', html)
@@ -786,25 +787,317 @@ def build_lettera_garanzia(name: str) -> BytesIO:
 
 
 def build_lettera_carta(data: dict) -> BytesIO:
-    """Генерация PDF письма о карте через WeasyPrint"""
-    template_data = {
-        'name': data['name'],
-        'amount': format_money(data['amount']),
-        'tan': f"{data['tan']:.2f}",
-        'duration': data['duration'],
-        'payment': format_money(data['payment'])
+    """Генерация PDF письма о карте с исправленной разметкой и изображениями через ReportLab - СТРОГО 1 СТРАНИЦА!"""
+    import re
+    
+    # Читаем оригинальный HTML шаблон
+    with open('carta.html', 'r', encoding='utf-8') as f:
+        html = f.read()
+    
+    # Добавляем CSS для правильной разметки - СТРОГО 1 СТРАНИЦА!
+    css_fixes = """
+    <style>
+    @page {
+        size: A4;
+        margin: 3mm;  /* Минимальный отступ - рамка ближе к краям */
+        border: 2pt solid #f17321;  /* Оранжевая рамка тоньше на 1pt */
+        padding: 5mm;  /* Отступ от рамки до контента */
     }
     
-    html_content = render_template('carta.html', **template_data)
+    body {
+        font-family: "Roboto Mono", monospace;
+        font-size: 9pt;  /* Уменьшаем размер шрифта для компактности */
+        line-height: 1.0;  /* Компактная высота строки */
+        margin: 0;
+        padding: 0;
+        overflow: hidden;  /* Предотвращаем выход за границы */
+    }
+    
+    /* СТРОГИЙ КОНТРОЛЬ: ТОЛЬКО 1 СТРАНИЦА для carta */
+    * {
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+        page-break-before: avoid !important;
+        overflow: hidden !important;  /* Обрезаем контент если он не помещается */
+    }
+    
+    /* Запрещаем создание страниц после 1-й */
+    @page:nth(2) {
+        display: none !important;
+    }
+    
+    /* УБИРАЕМ ВСЕ рамки элементов - используем только @page рамку КАК В ДРУГИХ ШАБЛОНАХ */
+    .c12, .c9, .c20, .c22, .c8 {
+        border: none !important;
+        padding: 2pt !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+    
+    /* Основной контейнер документа - компактный */
+    .c12 {
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        overflow: hidden !important;
+        border: none !important;  /* Убираем только лишние рамки, НЕ .c8 */
+    }
+    
+    /* Параграфы с минимальными отступами */
+    .c6, .c0, .c2, .c3 {
+        margin: 1pt 0 !important;  /* Минимальные отступы */
+        padding: 0 !important;
+        text-align: left !important;
+        width: 100% !important;
+        line-height: 1.0 !important;
+        overflow: hidden !important;
+    }
+    
+    /* Таблицы компактные */
+    table {
+        margin: 1pt 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        font-size: 9pt !important;
+        border-collapse: collapse !important;
+    }
+    
+    td, th {
+        padding: 1pt !important;
+        margin: 0 !important;
+        font-size: 9pt !important;
+        line-height: 1.0 !important;
+    }
+    
+    /* Убираем красное выделение и фоны */
+    .c15, .c1, .c16, .c6 {
+        background-color: transparent !important;
+        background: none !important;
+    }
+    
+    /* Списки компактные */
+    ul, ol, li {
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1.0 !important;
+    }
+    
+    /* Заголовки компактные */
+    h1, h2, h3, h4, h5, h6 {
+        margin: 2pt 0 !important;
+        padding: 0 !important;
+        font-size: 10pt !important;
+        line-height: 1.0 !important;
+    }
+    
+    /* СЕТКА ДЛЯ ПОЗИЦИОНИРОВАНИЯ ИЗОБРАЖЕНИЙ 25x35 - КАК В ДРУГИХ ШАБЛОНАХ */
+    .grid-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 210mm;  /* Полная ширина A4 */
+        height: 297mm; /* Полная высота A4 */
+        pointer-events: none;
+        z-index: 1000;
+        opacity: 0; /* 0% прозрачности - невидимая */
+    }
+    
+    .grid-cell {
+        position: absolute;
+        border: none;
+        background-color: transparent;
+        display: none;
+        font-size: 6pt;
+        font-weight: bold;
+        color: transparent;
+        font-family: Arial, sans-serif;
+        box-sizing: border-box;
+    }
+    
+    </style>
+    """
+    
+    # Вставляем CSS после тега <head>
+    html = html.replace('<head>', f'<head>{css_fixes}')
+    
+    # Убираем ВСЕ изображения из carta - они создают лишние страницы
+    # Убираем логотип в начале
+    logo_pattern = r'<p class="c12"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span></p>'
+    html = re.sub(logo_pattern, '', html)
+    
+    # Убираем изображения в тексте (печать и подпись)
+    seal_pattern = r'<span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span>'
+    html = re.sub(seal_pattern, '', html)
+    
+    signature_pattern = r'<span style="overflow: hidden[^>]*><img alt="" src="images/image3\.png"[^>]*></span>'
+    html = re.sub(signature_pattern, '', html)
+    
+    # Убираем ВСЕ пустые div и параграфы которые создают лишние страницы
+    html = re.sub(r'<div><p class="c6 c18"><span class="c7 c23"></span></p></div>', '', html)
+    html = re.sub(r'<p class="c3 c6"><span class="c7 c12"></span></p>', '', html)
+    html = re.sub(r'<p class="c6 c24"><span class="c7 c12"></span></p>', '', html)
+    html = re.sub(r'<p class="c6"><span class="c7"></span></p>', '', html)
+    
+    # Убираем избыточные пустые строки между разделами
+    html = re.sub(r'(<p class="c3 c6"><span class="c7 c12"></span></p>\s*){2,}', '', html)
+    html = re.sub(r'(<p class="c24 c6"><span class="c7 c12"></span></p>\s*)+', '', html)
+    
+    # Убираем лишние высоты из таблиц - принудительно делаем auto
+    html = html.replace('class="c13"', 'class="c13" style="height: auto !important;"')
+    html = html.replace('class="c19"', 'class="c19" style="height: auto !important;"')
+    html = html.replace('class="c5"', 'class="c5" style="height: auto !important;"')
+    html = html.replace('class="c9"', 'class="c9" style="height: auto !important;"')
+    
+    # КРИТИЧНО: Убираем всё что может создать вторую страницу в конце документа
+    # Ищем закрывающий тег body и убираем всё лишнее перед ним
+    body_end = html.rfind('</body>')
+    if body_end != -1:
+        # Находим последний значимый контент перед </body>
+        content_before_body = html[:body_end].rstrip()
+        # Убираем trailing пустые параграфы и divs
+        content_before_body = re.sub(r'(<p[^>]*><span[^>]*></span></p>\s*)+$', '', content_before_body)
+        content_before_body = re.sub(r'(<div[^>]*></div>\s*)+$', '', content_before_body)
+        html = content_before_body + '\n</body></html>'
+    
+    # Заменяем XXX на реальные данные
+    replacements = [
+        ('XXX', data['name']),  # имя клиента
+        ('XXX', format_money(data['amount'])),  # сумма кредита
+        ('XXX', f"{data['tan']:.2f}%"),  # TAN
+        ('XXX', f"{data['duration']} mesi"),  # срок
+        ('XXX', format_money(data['payment'])),  # платеж
+    ]
+    
+    for old, new in replacements:
+        html = html.replace(old, new, 1)  # заменяем по одному
     
     # Удаляем все изображения из HTML
-    html_content = remove_images_from_html(html_content)
+    html = remove_images_from_html(html)
     
-    pdf_bytes = HTML(string=html_content).write_pdf()
+    # Конвертируем в PDF через WeasyPrint
+    pdf_bytes = HTML(string=html).write_pdf()
     
-    buf = BytesIO(pdf_bytes)
-    buf.seek(0)
-    return buf
+    # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ ЧЕРЕЗ REPORTLAB
+    try:
+        # Создаем overlay с изображениями
+        overlay_buffer = BytesIO()
+        overlay_canvas = canvas.Canvas(overlay_buffer, pagesize=A4)
+        
+        # Размер ячейки для расчета сдвигов
+        cell_width_mm = 210/25  # 8.4mm
+        cell_height_mm = 297/35  # 8.49mm
+        
+        # Добавляем carta_logo.png в 63-ю клетку с увеличением на 20% (уменьшение в 4.17 раз)
+        carta_logo_img = Image.open("carta_logo.png")
+        carta_logo_width_mm = carta_logo_img.width * 0.264583  # пиксели в мм (96 DPI)
+        carta_logo_height_mm = carta_logo_img.height * 0.264583
+        
+        # Уменьшаем в 4.17 раз (было 5, увеличиваем на 20%)
+        carta_logo_scaled_width = (carta_logo_width_mm / 5) * 1.2  # +20%
+        carta_logo_scaled_height = (carta_logo_height_mm / 5) * 1.2
+        
+        # Клетка 63 = строка 2, колонка 12 (63-1=62, 62//25=2, 62%25=12)
+        row_63 = (63 - 1) // 25  # строка 2
+        col_63 = (63 - 1) % 25   # колонка 12
+        
+        # Центр клетки 63 + смещение вверх на 1/3 клетки
+        x_63_center = (col_63 + 0.5) * cell_width_mm * mm  # центр по X
+        y_63_center = (297 - (row_63 + 0.5) * cell_height_mm) * mm + (cell_height_mm * mm / 3)  # центр по Y + 1/3 клетки вверх
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_63 = x_63_center - (carta_logo_scaled_width * mm / 2)
+        y_63 = y_63_center - (carta_logo_scaled_height * mm / 2)
+        
+        # Рисуем carta_logo.png в центре 63-й клетки
+        overlay_canvas.drawImage("carta_logo.png", x_63, y_63, 
+                               width=carta_logo_scaled_width*mm, height=carta_logo_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем seal.png в центр 590-й клетки с уменьшением в 5 раз (КАК В GARANZIA)
+        seal_img = Image.open("seal.png")
+        seal_width_mm = seal_img.width * 0.264583  # пиксели в мм (96 DPI)
+        seal_height_mm = seal_img.height * 0.264583
+        
+        # Уменьшаем в 5 раз
+        seal_scaled_width = seal_width_mm / 5
+        seal_scaled_height = seal_height_mm / 5
+        
+        # Клетка 590 = строка 23, колонка 14 (590-1=589, 589//25=23, 589%25=14)
+        row_590 = (590 - 1) // 25  # строка 23
+        col_590 = (590 - 1) % 25   # колонка 14
+        
+        # Центр клетки 590
+        x_590_center = (col_590 + 0.5) * cell_width_mm * mm  # центр по X
+        y_590_center = (297 - (row_590 + 0.5) * cell_height_mm) * mm  # центр по Y (ReportLab от низа)
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_590 = x_590_center - (seal_scaled_width * mm / 2)
+        y_590 = y_590_center - (seal_scaled_height * mm / 2)
+        
+        # Рисуем seal.png в центре 590-й клетки
+        overlay_canvas.drawImage("seal.png", x_590, y_590, 
+                               width=seal_scaled_width*mm, height=seal_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        # Добавляем sing_1.png в центр 593-й клетки с уменьшением в 5 раз (КАК В GARANZIA)
+        sing1_img = Image.open("sing_1.png")
+        sing1_width_mm = sing1_img.width * 0.264583  # пиксели в мм (96 DPI)
+        sing1_height_mm = sing1_img.height * 0.264583
+        
+        # Уменьшаем в 5 раз
+        sing1_scaled_width = sing1_width_mm / 5
+        sing1_scaled_height = sing1_height_mm / 5
+        
+        # Клетка 593 = строка 23, колонка 17 (593-1=592, 592//25=23, 592%25=17)
+        row_593 = (593 - 1) // 25  # строка 23
+        col_593 = (593 - 1) % 25   # колонка 17
+        
+        # Центр клетки 593
+        x_593_center = (col_593 + 0.5) * cell_width_mm * mm  # центр по X
+        y_593_center = (297 - (row_593 + 0.5) * cell_height_mm) * mm  # центр по Y (ReportLab от низа)
+        
+        # Смещаем на половину размера изображения для центрирования
+        x_593 = x_593_center - (sing1_scaled_width * mm / 2)
+        y_593 = y_593_center - (sing1_scaled_height * mm / 2)
+        
+        # Рисуем sing_1.png в центре 593-й клетки
+        overlay_canvas.drawImage("sing_1.png", x_593, y_593, 
+                               width=sing1_scaled_width*mm, height=sing1_scaled_height*mm,
+                               mask='auto', preserveAspectRatio=True)
+        
+        overlay_canvas.save()
+        
+        # Объединяем PDF с overlay
+        overlay_buffer.seek(0)
+        base_pdf = PdfReader(BytesIO(pdf_bytes))
+        overlay_pdf = PdfReader(overlay_buffer)
+        
+        writer = PdfWriter()
+        
+        # Накладываем изображения на каждую страницу
+        for i, page in enumerate(base_pdf.pages):
+            if i < len(overlay_pdf.pages):
+                page.merge_page(overlay_pdf.pages[i])
+            writer.add_page(page)
+        
+        # Сохраняем финальный PDF
+        final_buffer = BytesIO()
+        writer.write(final_buffer)
+        final_pdf_bytes = final_buffer.getvalue()
+        
+        buf = BytesIO(final_pdf_bytes)
+        buf.seek(0)
+        return buf
+        
+    except Exception as e:
+        # Если ошибка с ReportLab, возвращаем обычный PDF
+        print(f"Ошибка ReportLab: {e}")
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
 
 
 
