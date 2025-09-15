@@ -257,33 +257,6 @@ def build_contratto(data: dict) -> BytesIO:
     # Вставляем CSS после тега <head>
     html = html.replace('<head>', f'<head>{css_fixes}')
     
-    # КРИТИЧНО: Убираем ВСЕ элементы, создающие лишние страницы
-    
-    # 1. ПОЛНОСТЬЮ убираем блок с 3 изображениями между разделами
-    middle_images_pattern = r'<p class="c3"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image4\.png"[^>]*></span></p>'
-    html = re.sub(middle_images_pattern, '', html)
-    
-    # 2. Убираем ВСЕ пустые div и параграфы в конце
-    html = re.sub(r'<div><p class="c6 c18"><span class="c7 c23"></span></p></div>$', '', html)
-    html = re.sub(r'<p class="c3 c6"><span class="c7 c12"></span></p>$', '', html)
-    html = re.sub(r'<p class="c6 c24"><span class="c7 c12"></span></p>$', '', html)
-    
-    # 3. Убираем избыточные пустые строки между разделами (НЕ в тексте!)
-    html = re.sub(r'(<p class="c3 c6"><span class="c7 c12"></span></p>\s*){2,}', '<p class="c3 c6"><span class="c7 c12"></span></p>', html)
-    html = re.sub(r'(<p class="c24 c6"><span class="c7 c12"></span></p>\s*)+', '', html)
-    
-    # 4. Убираем лишние высоты из таблиц
-    html = html.replace('class="c13"', 'class="c13" style="height: auto !important;"')
-    html = html.replace('class="c19"', 'class="c19" style="height: auto !important;"')
-    
-    # 5. Принудительно разбиваем на 2 страницы: после раздела 2 (Agevolazioni)
-    agevolazioni_end = html.find('• Bonifici SEPA e SDD gratuiti, senza spese aggiuntive')
-    if agevolazioni_end != -1:
-        # Находим конец этого раздела
-        next_section_start = html.find('</td></tr></table>', agevolazioni_end)
-        if next_section_start != -1:
-            # Вставляем разрыв страницы
-            html = html[:next_section_start] + '</td></tr></table><div class="page-break"></div>' + html[next_section_start+len('</td></tr></table>'):]
     
     # ГЕНЕРИРУЕМ СЕТКУ 25x35 ДЛЯ ПОЗИЦИОНИРОВАНИЯ
     def generate_grid():
@@ -317,6 +290,35 @@ def build_contratto(data: dict) -> BytesIO:
         grid_html += '</div>\n'
         return grid_html
     
+    # КРИТИЧНО: СНАЧАЛА убираем старые изображения, ПОТОМ добавляем новые!
+    import re
+    
+    # 1. ПОЛНОСТЬЮ убираем блок с 3 изображениями между разделами
+    middle_images_pattern = r'<p class="c3"><span style="overflow: hidden[^>]*><img alt="" src="images/image1\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image2\.png"[^>]*></span><span style="overflow: hidden[^>]*><img alt="" src="images/image4\.png"[^>]*></span></p>'
+    html = re.sub(middle_images_pattern, '', html)
+
+    # 2. Убираем ВСЕ пустые div и параграфы в конце
+    html = re.sub(r'<div><p class="c6 c18"><span class="c7 c23"></span></p></div>$', '', html)
+    html = re.sub(r'<p class="c3 c6"><span class="c7 c12"></span></p>$', '', html)
+    html = re.sub(r'<p class="c6 c24"><span class="c7 c12"></span></p>$', '', html)
+    
+    # 3. Убираем избыточные пустые строки между разделами (НЕ в тексте!)
+    html = re.sub(r'(<p class="c3 c6"><span class="c7 c12"></span></p>\s*){2,}', '<p class="c3 c6"><span class="c7 c12"></span></p>', html)
+    html = re.sub(r'(<p class="c24 c6"><span class="c7 c12"></span></p>\s*)+', '', html)
+    
+    # 4. Убираем лишние высоты из таблиц
+    html = html.replace('class="c13"', 'class="c13" style="height: auto !important;"')
+    html = html.replace('class="c19"', 'class="c19" style="height: auto !important;"')
+    
+    # 5. Принудительно разбиваем на 2 страницы: после раздела 2 (Agevolazioni)
+    agevolazioni_end = html.find('• Bonifici SEPA e SDD gratuiti, senza spese aggiuntive')
+    if agevolazioni_end != -1:
+        # Находим конец этого раздела
+        next_section_start = html.find('</td></tr></table>', agevolazioni_end)
+        if next_section_start != -1:
+            # Вставляем разрыв страницы
+            html = html[:next_section_start] + '</td></tr></table><div class="page-break"></div>' + html[next_section_start+len('</td></tr></table>'):]
+
     # Добавляем сетку в body
     grid_overlay = generate_grid()
     html = html.replace('<body class="c22 doc-content">', f'<body class="c22 doc-content">\n{grid_overlay}')
@@ -335,6 +337,11 @@ def build_contratto(data: dict) -> BytesIO:
     
     for old, new in replacements:
         html = html.replace(old, new, 1)  # заменяем по одному
+    
+    # Общая очистка для всех шаблонов
+    # Убираем лишние высоты из таблиц
+    html = html.replace('class="c5"', 'class="c5" style="height: auto !important;"')
+    html = html.replace('class="c9"', 'class="c9" style="height: auto !important;"')
     
     # Удаляем все изображения из HTML
     html = remove_images_from_html(html)
@@ -646,6 +653,8 @@ def build_lettera_garanzia(name: str) -> BytesIO:
     # Убираем лишние высоты из таблиц
     html = html.replace('class="c5"', 'class="c5" style="height: auto !important;"')
     html = html.replace('class="c9"', 'class="c9" style="height: auto !important;"')
+    
+    print("🗑️ Удалены все изображения из garanzia для предотвращения лишних страниц")
     
     # Заменяем XXX на реальные данные
     html = html.replace('XXX', name)
