@@ -96,6 +96,19 @@ def build_pdf_external(doc: str, payload: dict) -> BytesIO:
     try:
         completed = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         logging.info("pdf_costructor output: %s", completed.stdout)
+        
+        # Проверяем, что файл создался и не пустой
+        if not os.path.exists(tmp_path):
+            logging.error("PDF file was not created: %s", tmp_path)
+            raise FileNotFoundError(f"PDF file was not created: {tmp_path}")
+            
+        file_size = os.path.getsize(tmp_path)
+        if file_size == 0:
+            logging.error("PDF file is empty: %s", tmp_path)
+            raise ValueError(f"PDF file is empty: {tmp_path}")
+            
+        logging.info("PDF file created successfully, size: %d bytes", file_size)
+        
         with open(tmp_path, 'rb') as f:
             pdf_bytes = f.read()
         buf = BytesIO(pdf_bytes)

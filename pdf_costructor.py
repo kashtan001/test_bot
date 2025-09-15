@@ -614,7 +614,7 @@ if __name__ == '__main__':
                 from reportlab.pdfgen import canvas
                 from reportlab.lib.pagesizes import A4
                 from reportlab.lib.units import mm
-                from PyPDF2 import PdfReader, PdfWriter
+                from pypdf import PdfReader, PdfWriter
                 from io import BytesIO
                 
                 # Создаем overlay с изображениями и/или сеткой
