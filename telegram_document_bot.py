@@ -237,6 +237,37 @@ def build_contratto(data: dict) -> BytesIO:
         position: absolute;
         z-index: 500;
     }
+    
+    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ЭЛЕМЕНТОВ С ДАННЫМИ */
+    /* Фиксируем размеры ячеек с данными для стабильного позиционирования */
+    .c5 {
+        width: 272.9pt !important;
+        min-height: 20pt !important;
+        max-height: 25pt !important;
+        overflow: hidden !important;
+    }
+    
+    /* Фиксируем размеры текста с данными */
+    .c1, .c16 {
+        display: inline-block !important;
+        min-width: 80pt !important;
+        max-width: 200pt !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    
+    /* Фиксируем высоту строк таблицы */
+    .c25 tr {
+        height: 25pt !important;
+    }
+    
+    /* Стабилизируем контейнер документа */
+    .c20 {
+        min-height: 774.4pt !important;
+        max-height: 774.4pt !important;
+        overflow: hidden !important;
+    }
     </style>
     """
     
@@ -428,9 +459,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing_scaled_width = (sing_width_mm / 7) * 0.9  # -10%
         sing_scaled_height = (sing_height_mm / 7) * 0.9
         
-        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вверх на 0.5 клетки (было вниз на 0.5)
+        # Левая грань квадрата 637 + сдвиг влево на 1 клетку и вниз на 0.5 клетки
         x_637 = (col_637 - 1) * cell_width_mm * mm  # влево на 1 клетку
-        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) + 0.5 * cell_height_mm) * mm  # вверх на 0.5 клетки (было вниз)
+        y_637 = (297 - (row_637 * cell_height_mm + cell_height_mm) - 0.5 * cell_height_mm) * mm  # вниз на 0.5 клетки
         
         # Рисуем sing_2.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_2.png", x_637, y_637, 
@@ -451,9 +482,9 @@ def build_contratto(data: dict) -> BytesIO:
         sing1_scaled_width = (sing1_width_mm / 6) * 1.1  # +10%
         sing1_scaled_height = (sing1_height_mm / 6) * 1.1
         
-        # Левая грань квадрата 628 + сдвиг на 1 клетку вниз (было 2, сместили на 1 вверх)
+        # Левая грань квадрата 628 + сдвиг на 2 клетки вниз
         x_628 = col_628 * cell_width_mm * mm
-        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 1 * cell_height_mm) * mm  # вниз на 1 клетку (было 2)
+        y_628 = (297 - (row_628 * cell_height_mm + cell_height_mm) - 2 * cell_height_mm) * mm  # вниз на 2 клетки
         
         # Рисуем sing_1.png с уменьшением в 6 раз и сохранением прозрачности
         overlay_canvas.drawImage("sing_1.png", x_628, y_628, 
@@ -474,9 +505,9 @@ def build_contratto(data: dict) -> BytesIO:
         seal_scaled_width = seal_width_mm / 7
         seal_scaled_height = seal_height_mm / 7
         
-        # Левая грань квадрата 682 + сдвиг вверх на 1 клетку
+        # Левая грань квадрата 682
         x_682 = col_682 * cell_width_mm * mm
-        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm + cell_height_mm * mm  # +1 клетка вверх
+        y_682 = (297 - (row_682 * cell_height_mm + cell_height_mm)) * mm
         
         # Рисуем seal.png с уменьшением в 7 раз и сохранением прозрачности
         overlay_canvas.drawImage("seal.png", x_682, y_682, 
@@ -613,6 +644,21 @@ def build_lettera_garanzia(name: str) -> BytesIO:
     .c15 {
         background-color: transparent !important;
         background: none !important;
+    }
+    
+    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ДЛЯ СТАБИЛЬНОСТИ */
+    /* Фиксируем размеры элементов с данными */
+    .c6 {
+        min-height: 15pt !important;
+        max-height: 20pt !important;
+        overflow: hidden !important;
+    }
+    
+    /* Стабилизируем контейнер */
+    .c9 {
+        min-height: 600pt !important;
+        max-height: 700pt !important;
+        overflow: hidden !important;
     }
     
     </style>
@@ -895,6 +941,34 @@ def build_lettera_carta(data: dict) -> BytesIO:
         color: transparent;
         font-family: Arial, sans-serif;
         box-sizing: border-box;
+    }
+    
+    /* ФИКСИРОВАННОЕ ПОЗИЦИОНИРОВАНИЕ ДЛЯ CARTA */
+    /* Фиксируем размеры элементов с данными для стабильности */
+    .c6, .c0, .c2, .c3 {
+        min-height: 12pt !important;
+        max-height: 15pt !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+    }
+    
+    /* Стабилизируем контейнер carta */
+    .c12 {
+        min-height: 600pt !important;
+        max-height: 700pt !important;
+        overflow: hidden !important;
+    }
+    
+    /* Фиксируем размеры таблиц */
+    table {
+        table-layout: fixed !important;
+        width: 100% !important;
+    }
+    
+    td, th {
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
     }
     
     </style>
