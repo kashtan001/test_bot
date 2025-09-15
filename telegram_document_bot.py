@@ -1,35 +1,35 @@
-# telegram_document_bot.py — Полный корректный код бота с авто-сбросом на /start
+# telegram_document_bot.py — Telegram бот с интеграцией PDF конструктора
 # -----------------------------------------------------------------------------
 # Генератор PDF-документов Intesa Sanpaolo:
 #   /contratto — кредитный договор
 #   /garanzia  — письмо о гарантийном взносе
 #   /carta     — письмо о выпуске карты
 # -----------------------------------------------------------------------------
-# Зависимости:
-#   pip install python-telegram-bot==20.* reportlab
+# Интеграция с pdf_costructor.py API
 # -----------------------------------------------------------------------------
 import logging
 import os
-import re
-import subprocess
-import tempfile
 from io import BytesIO
-from decimal import Decimal, ROUND_HALF_UP
 
 from telegram import Update, InputFile, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, ConversationHandler, MessageHandler, ContextTypes, filters,
 )
 
-from datetime import datetime
+# Импортируем API функции из PDF конструктора
+from pdf_costructor import (
+    generate_contratto_pdf,
+    generate_garanzia_pdf, 
+    generate_carta_pdf,
+    monthly_payment,
+    format_money
+)
 
 
 # ---------------------- Настройки ------------------------------------------
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TOKEN_HERE")
 DEFAULT_TAN = 7.86
 DEFAULT_TAEG = 8.30
-GARANZIA_COST = 180.0
-CARTA_COST = 120.0
 
 
 logging.basicConfig(format="%(asctime)s — %(levelname)s — %(message)s", level=logging.INFO)
@@ -38,99 +38,23 @@ logger = logging.getLogger(__name__)
 # ------------------ Состояния Conversation -------------------------------
 CHOOSING_DOC, ASK_NAME, ASK_AMOUNT, ASK_DURATION, ASK_TAN, ASK_TAEG = range(6)
 
-# ---------------------- Утилиты -------------------------------------------
-def money(val: float) -> str:
-    """Формат суммы: € 0.00"""
-    return f"€ {Decimal(val).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
+# ---------------------- PDF-строители через API -------------------------
+def build_contratto(data: dict) -> BytesIO:
+    """Генерация PDF договора через API pdf_costructor"""
+    return generate_contratto_pdf(data)
 
 
-def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
-    """Аннуитетный расчёт ежемесячного платежа"""
-    r = (annual_rate / 100) / 12
-    if r == 0:
-        return round(amount / months, 2)
-    num = amount * r * (1 + r) ** months
-    den = (1 + r) ** months - 1
-    return round(num / den, 2)
+def build_lettera_garanzia(name: str) -> BytesIO:
+    """Генерация PDF гарантийного письма через API pdf_costructor"""
+    return generate_garanzia_pdf(name)
 
 
-def format_money(amount: float) -> str:
-    """Форматирование суммы в евро"""
-    return f"€ {amount:,.2f}".replace(',', ' ')
+def build_lettera_carta(data: dict) -> BytesIO:
+    """Генерация PDF письма о карте через API pdf_costructor"""
+    return generate_carta_pdf(data)
 
 
-def format_date() -> str:
-    """Получение текущей даты в итальянском формате"""
-    return datetime.now().strftime("%d/%m/%Y")
-
-
-# ---------------------- Вызов внешнего сборщика PDF -------------------------
-def build_pdf_external(doc: str, payload: dict) -> BytesIO:
-    """Строит PDF через внешний скрипт pdf_costructor.py и возвращает BytesIO."""
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    tmp_path = tmp_file.name
-    tmp_file.close()
-
-    args = [
-        'python3', 'pdf_costructor.py',
-        '--doc', doc,
-        '--output', tmp_path,
-    ]
-
-    # Опциональные аргументы
-    if 'name' in payload:
-        args += ['--name', str(payload['name'])]
-    if 'amount' in payload:
-        args += ['--amount', str(payload['amount'])]
-    if 'duration' in payload:
-        args += ['--duration', str(payload['duration'])]
-    if 'tan' in payload:
-        args += ['--tan', str(payload['tan'])]
-    if 'taeg' in payload:
-        args += ['--taeg', str(payload['taeg'])]
-    if 'payment' in payload:
-        args += ['--payment', str(payload['payment'])]
-    if 'date' in payload:
-        args += ['--date', str(payload['date'])]
-
-    try:
-        completed = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        logging.info("pdf_costructor output: %s", completed.stdout)
-        
-        # Проверяем stderr на наличие ошибок
-        if completed.stderr:
-            logging.error("pdf_costructor stderr: %s", completed.stderr)
-        
-        # Проверяем, что файл создался и не пустой
-        if not os.path.exists(tmp_path):
-            logging.error("PDF file was not created: %s", tmp_path)
-            raise FileNotFoundError(f"PDF file was not created: {tmp_path}")
-            
-        file_size = os.path.getsize(tmp_path)
-        if file_size == 0:
-            logging.error("PDF file is empty: %s", tmp_path)
-            logging.error("Possible cause: WeasyPrint or library compatibility issue")
-            raise ValueError(f"PDF file is empty: {tmp_path}")
-            
-        logging.info("PDF file created successfully, size: %d bytes", file_size)
-        
-        with open(tmp_path, 'rb') as f:
-            pdf_bytes = f.read()
-        buf = BytesIO(pdf_bytes)
-        buf.seek(0)
-        return buf
-    except subprocess.CalledProcessError as e:
-        logging.error("pdf_costructor failed with return code %d", e.returncode)
-        logging.error("stdout: %s", e.stdout)
-        logging.error("stderr: %s", e.stderr)
-        raise
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-
-# ---------------------- Handlers -----------------------------------------
+# ------------------------- Handlers -----------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     kb = [["/contratto", "/garanzia", "/carta"]]
@@ -153,9 +77,12 @@ async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     name = update.message.text.strip()
     dt = context.user_data['doc_type']
     if dt == '/garanzia':
-        # Внешняя генерация через pdf_costructor.py
-        buf = build_pdf_external('garanzia', {'name': name})
-        await update.message.reply_document(InputFile(buf, f"Garanzia_{name}.pdf"))
+        try:
+            buf = build_lettera_garanzia(name)
+            await update.message.reply_document(InputFile(buf, f"Garanzia_{name}.pdf"))
+        except Exception as e:
+            logger.error(f"Ошибка генерации garanzia: {e}")
+            await update.message.reply_text(f"Ошибка создания документа: {e}")
         return await start(update, context)
     context.user_data['name'] = name
     await update.message.reply_text("Inserisci importo (€):")
@@ -163,7 +90,7 @@ async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def ask_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        amt = float(update.message.text.replace('€','').replace(',','.'))
+        amt = float(update.message.text.replace('€','').replace(',','.').replace(' ',''))
     except:
         await update.message.reply_text("Importo non valido, riprova:")
         return ASK_AMOUNT
@@ -183,39 +110,37 @@ async def ask_duration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def ask_tan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     txt = update.message.text.strip()
-    context.user_data['tan'] = float(txt.replace(',','.')) if txt else DEFAULT_TAN
+    try:
+        context.user_data['tan'] = float(txt.replace(',','.')) if txt else DEFAULT_TAN
+    except:
+        context.user_data['tan'] = DEFAULT_TAN
     await update.message.reply_text(f"Inserisci TAEG (%), enter per {DEFAULT_TAEG}%:")
     return ASK_TAEG
 
 async def ask_taeg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     txt = update.message.text.strip()
-    context.user_data['taeg'] = float(txt.replace(',','.')) if txt else DEFAULT_TAEG
+    try:
+        context.user_data['taeg'] = float(txt.replace(',','.')) if txt else DEFAULT_TAEG
+    except:
+        context.user_data['taeg'] = DEFAULT_TAEG
+    
     d = context.user_data
     d['payment'] = monthly_payment(d['amount'], d['duration'], d['tan'])
     dt = d['doc_type']
     
-    # Форматируем данные как в рабочей версии
-    formatted_data = {
-        'name': d['name'],
-        'amount': format_money(d['amount']),
-        'tan': f"{d['tan']:.2f}",
-        'taeg': f"{d['taeg']:.2f}",
-        'duration': str(d['duration']),
-        'payment': format_money(d['payment']),
-        'date': format_date(),
-    }
+    try:
+        if dt == '/contratto':
+            buf = build_contratto(d)
+            filename = f"Contratto_{d['name']}.pdf"
+        else:
+            buf = build_lettera_carta(d)
+            filename = f"Carta_{d['name']}.pdf"
+            
+        await update.message.reply_document(InputFile(buf, filename))
+    except Exception as e:
+        logger.error(f"Ошибка генерации PDF {dt}: {e}")
+        await update.message.reply_text(f"Ошибка создания документа: {e}")
     
-    # Внешняя генерация через pdf_costructor.py
-    if dt == '/contratto':
-        buf = build_pdf_external('contratto', formatted_data)
-        filename = f"Contratto_{d['name']}.pdf"
-    elif dt == '/garanzia':
-        buf = build_pdf_external('garanzia', {'name': d['name']})
-        filename = f"Garanzia_{d['name']}.pdf"
-    else:
-        buf = build_pdf_external('carta', formatted_data)
-        filename = f"Carta_{d['name']}.pdf"
-    await update.message.reply_document(InputFile(buf, filename))
     return await start(update, context)
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -238,8 +163,12 @@ def main():
         fallbacks=[CommandHandler('cancel', cancel), CommandHandler('start', start)],
     )
     app.add_handler(conv)
+    
+    print("🤖 Телеграм бот запущен!")
+    print("📋 Поддерживаемые документы: /contratto, /garanzia, /carta")
+    print("🔧 Использует PDF конструктор из pdf_costructor.py")
+    
     app.run_polling()
 
 if __name__ == '__main__':
     main()
-

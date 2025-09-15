@@ -1,10 +1,151 @@
 #!/usr/bin/env python3
 """
-Исправляем CSS для правильной разметки на 2 страницы с рамками
+PDF Constructor API для генерации документов Intesa Sanpaolo
+Поддерживает: contratto, garanzia, carta
 """
 
-def fix_html_layout(template_name='contratto', data=None):
-    """Исправляем HTML для корректного отображения. data — словарь значений для подстановки."""
+from io import BytesIO
+from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
+
+
+def format_money(amount: float) -> str:
+    """Форматирование суммы в евро"""
+    return f"€ {amount:,.2f}".replace(',', ' ')
+
+
+def format_date() -> str:
+    """Получение текущей даты в итальянском формате"""
+    return datetime.now().strftime("%d/%m/%Y")
+
+
+def monthly_payment(amount: float, months: int, annual_rate: float) -> float:
+    """Аннуитетный расчёт ежемесячного платежа"""
+    r = (annual_rate / 100) / 12
+    if r == 0:
+        return round(amount / months, 2)
+    num = amount * r * (1 + r) ** months
+    den = (1 + r) ** months - 1
+    return round(num / den, 2)
+
+
+def generate_contratto_pdf(data: dict) -> BytesIO:
+    """
+    API функция для генерации PDF договора
+    
+    Args:
+        data (dict): Словарь с данными {
+            'name': str - ФИО клиента,
+            'amount': float - Сумма кредита,
+            'duration': int - Срок в месяцах, 
+            'tan': float - TAN процентная ставка,
+            'taeg': float - TAEG эффективная ставка,
+            'payment': float - Ежемесячный платеж (опционально, будет рассчитан)
+        }
+    
+    Returns:
+        BytesIO: PDF файл в памяти
+    """
+    # Рассчитываем платеж если не задан
+    if 'payment' not in data:
+        data['payment'] = monthly_payment(data['amount'], data['duration'], data['tan'])
+    
+    html = fix_html_layout('contratto')
+    return _generate_pdf_with_images(html, 'contratto', data)
+
+
+def generate_garanzia_pdf(name: str) -> BytesIO:
+    """
+    API функция для генерации PDF гарантийного письма
+    
+    Args:
+        name (str): ФИО клиента
+        
+    Returns:
+        BytesIO: PDF файл в памяти
+    """
+    html = fix_html_layout('garanzia')
+    return _generate_pdf_with_images(html, 'garanzia', {'name': name})
+
+
+def generate_carta_pdf(data: dict) -> BytesIO:
+    """
+    API функция для генерации PDF письма о карте
+    
+    Args:
+        data (dict): Словарь с данными {
+            'name': str - ФИО клиента,
+            'amount': float - Сумма кредита,
+            'duration': int - Срок в месяцах,
+            'tan': float - TAN процентная ставка,
+            'payment': float - Ежемесячный платеж (опционально, будет рассчитан)
+        }
+    
+    Returns:
+        BytesIO: PDF файл в памяти
+    """
+    # Рассчитываем платеж если не задан
+    if 'payment' not in data:
+        data['payment'] = monthly_payment(data['amount'], data['duration'], data['tan'])
+    
+    html = fix_html_layout('carta')
+    return _generate_pdf_with_images(html, 'carta', data)
+
+
+def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> BytesIO:
+    """Внутренняя функция для генерации PDF с изображениями"""
+    try:
+        from weasyprint import HTML
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import mm
+        from PyPDF2 import PdfReader, PdfWriter
+        from PIL import Image
+        
+        # Заменяем XXX на реальные данные для contratto и carta
+        if template_name in ['contratto', 'carta']:
+            replacements = []
+            if template_name == 'contratto':
+                replacements = [
+                    ('>XXX<', f">{data['name']}<"),  # имя клиента (первое)
+                    ('>XXX<', f">{format_money(data['amount'])}<"),  # сумма кредита
+                    ('>XXX<', f">{data['tan']:.2f}%<"),  # TAN
+                    ('>XXX<', f">{data['taeg']:.2f}%<"),  # TAEG  
+                    ('>XXX<', f">{data['duration']} mesi<"),  # срок
+                    ('>XXX<', f">{format_money(data['payment'])}<"),  # платеж
+                    ('11/06/2025', format_date()),  # дата
+                    ('>XXX<', f">{data['name']}<"),  # имя в подписи
+                ]
+            elif template_name == 'carta':
+                replacements = [
+                    ('XXX', data['name']),  # имя клиента
+                    ('XXX', format_money(data['amount'])),  # сумма кредита
+                    ('XXX', f"{data['tan']:.2f}%"),  # TAN
+                    ('XXX', f"{data['duration']} mesi"),  # срок
+                    ('XXX', format_money(data['payment'])),  # платеж
+                ]
+            
+            for old, new in replacements:
+                html = html.replace(old, new, 1)  # заменяем по одному
+        
+        elif template_name == 'garanzia':
+            # Для garanzia просто заменяем XXX на имя
+            html = html.replace('XXX', data['name'])
+        
+        # Конвертируем HTML в PDF
+        pdf_bytes = HTML(string=html).write_pdf()
+        
+        # Возвращаем PDF (изображения добавляются в самой функции fix_html_layout)
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
+            
+    except Exception as e:
+        print(f"Ошибка генерации PDF: {e}")
+        raise
+
+def fix_html_layout(template_name='contratto'):
+    """Исправляем HTML для корректного отображения"""
     
     # Читаем оригинальный HTML
     html_file = f'{template_name}.html'
@@ -543,71 +684,45 @@ def fix_html_layout(template_name='contratto', data=None):
     print("🔧 Рамка зафиксирована через @page - будет на каждой странице!")
     print("📄 Удалены изображения между разделами - главная причина лишних страниц")
     
-    # Подстановка данных: совместимо с исходной схемой замены XXX
-    if data is None:
-        data = {
-            'name': 'Mario Rossi',
-            'amount': '€ 15 000,00',
-            'tan': '7.86',
-            'taeg': '8.30', 
-            'duration': '36',
-            'payment': '€ 465,23',
-            'date': '15/09/2025',
-        }
-
+    # Тестируем с тестовыми данными
+    test_data = {
+        'name': 'Mario Rossi',
+        'amount': '€ 15 000,00',
+        'tan': '7.86',
+        'taeg': '8.30', 
+        'duration': '36',
+        'payment': '€ 465,23'
+    }
+    
     replacements = [
-        ('>XXX<', f">{data.get('name','')}<"),
-        ('>XXX<', f">{data.get('amount','')}<"),
-        ('>XXX<', f">{data.get('tan','')}%<"),
-        ('>XXX<', f">{data.get('taeg','')}%<"),
-        ('>XXX<', f">{data.get('duration','')} mesi<"),
-        ('>XXX<', f">{data.get('payment','')}<"),
-        ('11/06/2025', data.get('date','')),
-        ('>XXX<', f">{data.get('name','')}<"),
+        ('>XXX<', f">{test_data['name']}<"),
+        ('>XXX<', f">{test_data['amount']}<"),
+        ('>XXX<', f">{test_data['tan']}%<"),
+        ('>XXX<', f">{test_data['taeg']}%<"),
+        ('>XXX<', f">{test_data['duration']} mesi<"),
+        ('>XXX<', f">{test_data['payment']}<"),
+        ('11/06/2025', '15/09/2025'),
+        ('>XXX<', f">{test_data['name']}<"),
     ]
-
+    
     for old, new in replacements:
-        if new:
-            html = html.replace(old, new, 1)
+        html = html.replace(old, new, 1)
     
     return html
 
 if __name__ == '__main__':
     import sys
-    import argparse
-    from datetime import datetime
     
-    parser = argparse.ArgumentParser(description='PDF constructor CLI')
-    parser.add_argument('--doc', default='contratto', choices=['contratto','garanzia','carta'])
-    parser.add_argument('--name', default='')
-    parser.add_argument('--amount', default='')
-    parser.add_argument('--duration', default='')
-    parser.add_argument('--tan', default='')
-    parser.add_argument('--taeg', default='')
-    parser.add_argument('--payment', default='')
-    parser.add_argument('--date', default=datetime.now().strftime('%d/%m/%Y'))
-    parser.add_argument('--output', default='output.pdf')
-    args = parser.parse_args()
-
-    template = args.doc
-    data = {
-        'name': args.name,
-        'amount': args.amount,
-        'duration': args.duration,
-        'tan': args.tan,
-        'taeg': args.taeg,
-        'payment': args.payment,
-        'date': args.date,
-    }
-
+    # Определяем какой шаблон обрабатывать
+    template = sys.argv[1] if len(sys.argv) > 1 else 'contratto'
+    
     print(f"🔧 Исправляем разметку для {template} - 2 страницы с рамками...")
-    fixed_html = fix_html_layout(template, data)
+    fixed_html = fix_html_layout(template)
     
     # Тестируем конвертацию
     try:
-        from weasyprint import HTML, CSS
-        html_doc = HTML(string=fixed_html)
-        pdf_bytes = html_doc.write_pdf()
+        from weasyprint import HTML
+        pdf_bytes = HTML(string=fixed_html).write_pdf()
         
         # НАКЛАДЫВАЕМ ИЗОБРАЖЕНИЯ И СЕТКУ ЧЕРЕЗ REPORTLAB
         if template in ['contratto', 'garanzia', 'carta']:
@@ -615,15 +730,7 @@ if __name__ == '__main__':
                 from reportlab.pdfgen import canvas
                 from reportlab.lib.pagesizes import A4
                 from reportlab.lib.units import mm
-                # Try new pypdf first, fallback to PyPDF2
-                try:
-                    from pypdf import PdfReader, PdfWriter
-                except ImportError:
-                    try:
-                        from PyPDF2 import PdfReader, PdfWriter
-                    except ImportError:
-                        print("❌ Нужна библиотека: pip install pypdf или PyPDF2")
-                        raise
+                from PyPDF2 import PdfReader, PdfWriter
                 from io import BytesIO
                 
                 # Создаем overlay с изображениями и/или сеткой
@@ -1040,7 +1147,7 @@ if __name__ == '__main__':
                 writer.write(final_buffer)
                 final_pdf_bytes = final_buffer.getvalue()
                 
-                output_pdf = args.output
+                output_pdf = f'test_{template}.pdf'
                 with open(output_pdf, 'wb') as f:
                     f.write(final_pdf_bytes)
                     
@@ -1049,35 +1156,70 @@ if __name__ == '__main__':
                 print(f"📄 Файл сохранен как {output_pdf}")
                 
             except ImportError as e:
-                print(f"❌ Нужны библиотеки: pip install reportlab pypdf")
+                print(f"❌ Нужны библиотеки: pip install reportlab PyPDF2")
                 print(f"❌ Ошибка импорта: {e}")
                 # Сохраняем обычный PDF без изображений
-                output_pdf = args.output
-                with open(output_pdf, 'wb') as f:
-                    f.write(pdf_bytes)
-                print(f"✅ Обычный PDF создан! Размер: {len(pdf_bytes)} байт")
-            except Exception as e:
-                print(f"❌ Ошибка при обработке изображений: {e}")
-                # Сохраняем обычный PDF без изображений
-                output_pdf = args.output
+                output_pdf = f'test_{template}.pdf'
                 with open(output_pdf, 'wb') as f:
                     f.write(pdf_bytes)
                 print(f"✅ Обычный PDF создан! Размер: {len(pdf_bytes)} байт")
         else:
             # Для других шаблонов - простой PDF без изображений
-            output_pdf = args.output
+            output_pdf = f'test_{template}_fixed.pdf'
             with open(output_pdf, 'wb') as f:
                 f.write(pdf_bytes)
             print(f"✅ PDF создан! Размер: {len(pdf_bytes)} байт")
             print(f"📄 Файл сохранен как {output_pdf}")
         
-    except ImportError as e:
-        print(f"❌ Нужен WeasyPrint: pip install weasyprint")
-        print(f"❌ Ошибка импорта: {e}")
-        sys.exit(1)
+    except ImportError:
+        print("❌ Нужен WeasyPrint для тестирования")
     except Exception as e:
-        print(f"❌ Ошибка при генерации PDF: {e}")
-        import traceback
-        print("Полный traceback:")
-        traceback.print_exc()
-        sys.exit(1)
+        print(f"❌ Ошибка: {e}")
+
+
+def main():
+    """Функция для тестирования PDF конструктора"""
+    import sys
+    
+    # Определяем какой шаблон обрабатывать
+    template = sys.argv[1] if len(sys.argv) > 1 else 'contratto'
+    
+    print(f"🧪 Тестируем PDF конструктор для {template} через API...")
+    
+    # Тестовые данные
+    test_data = {
+        'name': 'Mario Rossi',
+        'amount': 15000.0,
+        'tan': 7.86,
+        'taeg': 8.30, 
+        'duration': 36,
+        'payment': monthly_payment(15000.0, 36, 7.86)
+    }
+    
+    try:
+        if template == 'contratto':
+            buf = generate_contratto_pdf(test_data)
+            filename = f'test_contratto.pdf'
+        elif template == 'garanzia':
+            buf = generate_garanzia_pdf(test_data['name'])
+            filename = f'test_garanzia.pdf'
+        elif template == 'carta':
+            buf = generate_carta_pdf(test_data)
+            filename = f'test_carta.pdf'
+        else:
+            print(f"❌ Неизвестный тип документа: {template}")
+            return
+        
+        # Сохраняем тестовый PDF
+        with open(filename, 'wb') as f:
+            f.write(buf.read())
+            
+        print(f"✅ PDF создан через API! Файл сохранен как {filename}")
+        print(f"📊 Данные: {test_data}")
+        
+    except Exception as e:
+        print(f"❌ Ошибка тестирования API: {e}")
+
+
+if __name__ == '__main__':
+    main()
