@@ -10,8 +10,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 
 def format_money(amount: float) -> str:
-    """Форматирование суммы в евро"""
-    return f"€ {amount:,.2f}".replace(',', ' ')
+    """Форматирование суммы БЕЗ знака € (он уже есть в HTML)"""
+    return f"{amount:,.2f}".replace(',', ' ')
 
 
 def format_date() -> str:
@@ -102,8 +102,8 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
         from PyPDF2 import PdfReader, PdfWriter
         from PIL import Image
         
-        # Заменяем XXX на реальные данные для contratto и carta
-        if template_name in ['contratto', 'carta']:
+        # Заменяем XXX на реальные данные для contratto, carta и garanzia
+        if template_name in ['contratto', 'carta', 'garanzia']:
             replacements = []
             if template_name == 'contratto':
                 replacements = [
@@ -124,13 +124,13 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
                     ('XXX', f"{data['duration']} mesi"),  # срок
                     ('XXX', format_money(data['payment'])),  # платеж
                 ]
+            elif template_name == 'garanzia':
+                replacements = [
+                    ('XXX', data['name']),  # имя клиента
+                ]
             
             for old, new in replacements:
                 html = html.replace(old, new, 1)  # заменяем по одному
-        
-        elif template_name == 'garanzia':
-            # Для garanzia просто заменяем XXX на имя
-            html = html.replace('XXX', data['name'])
         
         # Конвертируем HTML в PDF
         pdf_bytes = HTML(string=html).write_pdf()
