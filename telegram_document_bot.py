@@ -28,20 +28,6 @@ from reportlab.lib.units import mm
 from PyPDF2 import PdfReader, PdfWriter
 from PIL import Image
 
-def remove_images_from_html(html_content):
-    """Удаляет все изображения из HTML перед генерацией PDF"""
-    import re
-    
-    # Удаляем все теги <img>
-    html_content = re.sub(r'<img[^>]*>', '', html_content)
-    
-    # Удаляем пустые span'ы которые остались после удаления изображений
-    html_content = re.sub(r'<span[^>]*>\s*</span>', '', html_content)
-    
-    # Удаляем пустые параграфы с изображениями
-    html_content = re.sub(r'<p[^>]*>\s*(<span[^>]*>\s*</span>\s*)*</p>', '', html_content)
-    
-    return html_content
 
 # ---------------------- Настройки ------------------------------------------
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TOKEN_HERE")
@@ -324,7 +310,7 @@ def build_contratto(data: dict) -> BytesIO:
     grid_overlay = generate_grid()
     html = html.replace('<body class="c22 doc-content">', f'<body class="c22 doc-content">\n{grid_overlay}')
     
-    # Заменяем XXX на реальные данные (в правильном порядке!)
+    # Заменяем XXX на реальные данные (ТОЧНО КАК В fix_layout.py!)
     replacements = [
         ('>XXX<', f">{data['name']}<"),  # имя клиента (первое)
         ('>XXX<', f">{format_money(data['amount'])}<"),  # сумма кредита
@@ -343,9 +329,6 @@ def build_contratto(data: dict) -> BytesIO:
     # Убираем лишние высоты из таблиц
     html = html.replace('class="c5"', 'class="c5" style="height: auto !important;"')
     html = html.replace('class="c9"', 'class="c9" style="height: auto !important;"')
-    
-    # Удаляем все изображения из HTML
-    html = remove_images_from_html(html)
     
     # Конвертируем в PDF через WeasyPrint
     pdf_bytes = HTML(string=html).write_pdf()
@@ -660,9 +643,6 @@ def build_lettera_garanzia(name: str) -> BytesIO:
     # Заменяем XXX на реальные данные
     html = html.replace('XXX', name)
     
-    # Удаляем все изображения из HTML
-    html = remove_images_from_html(html)
-    
     # Конвертируем в PDF через WeasyPrint
     pdf_bytes = HTML(string=html).write_pdf()
     
@@ -973,9 +953,6 @@ def build_lettera_carta(data: dict) -> BytesIO:
     
     for old, new in replacements:
         html = html.replace(old, new, 1)  # заменяем по одному
-    
-    # Удаляем все изображения из HTML
-    html = remove_images_from_html(html)
     
     # Конвертируем в PDF через WeasyPrint
     pdf_bytes = HTML(string=html).write_pdf()
