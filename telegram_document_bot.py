@@ -186,15 +186,27 @@ async def ask_taeg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     d = context.user_data
     d['payment'] = monthly_payment(d['amount'], d['duration'], d['tan'])
     dt = d['doc_type']
+    
+    # Форматируем данные как в рабочей версии
+    formatted_data = {
+        'name': d['name'],
+        'amount': format_money(d['amount']),
+        'tan': f"{d['tan']:.2f}",
+        'taeg': f"{d['taeg']:.2f}",
+        'duration': str(d['duration']),
+        'payment': format_money(d['payment']),
+        'date': format_date(),
+    }
+    
     # Внешняя генерация через pdf_costructor.py
     if dt == '/contratto':
-        buf = build_pdf_external('contratto', d)
+        buf = build_pdf_external('contratto', formatted_data)
         filename = f"Contratto_{d['name']}.pdf"
     elif dt == '/garanzia':
         buf = build_pdf_external('garanzia', {'name': d['name']})
         filename = f"Garanzia_{d['name']}.pdf"
     else:
-        buf = build_pdf_external('carta', d)
+        buf = build_pdf_external('carta', formatted_data)
         filename = f"Carta_{d['name']}.pdf"
     await update.message.reply_document(InputFile(buf, filename))
     return await start(update, context)
