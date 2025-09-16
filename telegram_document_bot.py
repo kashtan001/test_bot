@@ -1,4 +1,4 @@
-# telegram_document_bot.py — Telegram бот с интеграцией PDF конструктора
+ # telegram_document_bot.py — Telegram бот с интеграцией PDF конструктора
 # -----------------------------------------------------------------------------
 # Генератор PDF-документов Intesa Sanpaolo:
 #   /contratto — кредитный договор
