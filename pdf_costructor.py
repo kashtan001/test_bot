@@ -337,6 +337,16 @@ def _generate_pdf_with_images(html: str, template_name: str, data: dict) -> Byte
                 signatures_table = generate_signatures_table()
                 html = html.replace('<!-- SIGNATURES_TABLE_PLACEHOLDER -->', signatures_table)
                 print("✅ Таблица с подписями и печатью добавлена перед нижней линией")
+                
+                # Добавляем класс к разделу 7 для принудительного разрыва страницы
+                import re
+                # Ищем параграф с "7. Firme" и добавляем класс
+                html = re.sub(
+                    r'(<p class="c2">\s*<span class="c12 c6">7\. Firme</span>\s*</p>)',
+                    r'<p class="c2 section-7-firme"><span class="c12 c6">7. Firme</span></p>',
+                    html
+                )
+                print("✅ Раздел 7 'Firme' будет начинаться с новой страницы")
             elif template_name == 'carta':
                 replacements = [
                     ('XXX', data['name']),  # имя клиента
@@ -1045,6 +1055,11 @@ def fix_html_layout(template_name='contratto'):
     .c1, .c16 {
         background-color: transparent !important;
         background: none !important;
+    }
+    
+    /* Раздел 7 "Firme" всегда начинается с новой страницы */
+    .section-7-firme {
+        page-break-before: always !important;
     }
     
     /* ТАБЛИЦА С ПОДПИСЯМИ И ПЕЧАТЬЮ - динамически в конце документа */
